@@ -51,7 +51,7 @@ type TxOutput struct {
 	Amount  uint64 `json:"amount"`
 }
 
-func GetBlockHeaderFromBlockInfo(blockType uint, blockInfo interface{}, nextBlockNumber uint64) *BlockHeader {
+func GetBlockHeaderFromBlockInfo(blockType uint, blockInfo interface{}, nextBlockNumber uint64) (*BlockHeader, error) {
 	var blockHeaderFull ledger.BlockHeader
 
 	// /home/bbs/go/pkg/mod/github.com/blinklabs-io/gouroboros@v0.69.3/ledger/block.go
@@ -74,8 +74,7 @@ func GetBlockHeaderFromBlockInfo(blockType uint, blockInfo interface{}, nextBloc
 	if blockNumber == 0 {
 		blockNumber = nextBlockNumber
 	} else if blockNumber != nextBlockNumber {
-		// nolint
-		panic(fmt.Errorf("invalid number of block: expected %d vs %d", nextBlockNumber, blockNumber))
+		return nil, fmt.Errorf("invalid number of block: expected %d vs %d", nextBlockNumber, blockNumber)
 	}
 
 	return &BlockHeader{
@@ -84,43 +83,10 @@ func GetBlockHeaderFromBlockInfo(blockType uint, blockInfo interface{}, nextBloc
 		BlockNumber: blockNumber,
 		EraID:       blockHeaderFull.Era().Id,
 		EraName:     blockHeaderFull.Era().Name,
-	}
+	}, nil
 }
 
-func GetFullBlock(bh *BlockHeader, blockTxs []ledger.Transaction) *FullBlock {
-	var txs []*Tx
-
-	if len(blockTxs) > 0 {
-		txs = make([]*Tx, len(blockTxs))
-	}
-
-	for i, x := range blockTxs {
-		txs[i] = &Tx{
-			Hash:    x.Hash(),
-			Fee:     x.Fee(),
-			Inputs:  make([]*TxInput, len(x.Inputs())),
-			Outputs: make([]*TxOutput, len(x.Outputs())),
-		}
-
-		if x.Metadata() != nil && x.Metadata().Cbor() != nil {
-			txs[i].Metadata = x.Metadata().Cbor()
-		}
-
-		for j, y := range x.Inputs() {
-			txs[i].Inputs[j] = &TxInput{
-				Hash:  y.Id().String(),
-				Index: y.Index(),
-			}
-		}
-
-		for j, y := range x.Outputs() {
-			txs[i].Outputs[j] = &TxOutput{
-				Address: y.Address().String(),
-				Amount:  y.Amount(),
-			}
-		}
-	}
-
+func NewFullBlock(bh *BlockHeader, txs []*Tx) *FullBlock {
 	return &FullBlock{
 		BlockSlot:   bh.BlockSlot,
 		BlockHash:   bh.BlockHash,
@@ -129,6 +95,54 @@ func GetFullBlock(bh *BlockHeader, blockTxs []ledger.Transaction) *FullBlock {
 		EraName:     bh.EraName,
 		Txs:         txs,
 	}
+}
+
+func NewTransaction(ledgerTx ledger.Transaction) *Tx {
+	tx := &Tx{
+		Hash: ledgerTx.Hash(),
+		Fee:  ledgerTx.Fee(),
+	}
+
+	if ledgerTx.Metadata() != nil && ledgerTx.Metadata().Cbor() != nil {
+		tx.Metadata = ledgerTx.Metadata().Cbor()
+	}
+
+	inputs, outputs := ledgerTx.Inputs(), ledgerTx.Outputs()
+
+	if ln := len(inputs); ln > 0 {
+		tx.Inputs = make([]*TxInput, ln)
+		for j, inp := range inputs {
+			tx.Inputs[j] = &TxInput{
+				Hash:  inp.Id().String(),
+				Index: inp.Index(),
+			}
+		}
+	}
+
+	if ln := len(outputs); ln > 0 {
+		tx.Outputs = make([]*TxOutput, ln)
+		for j, out := range outputs {
+			tx.Outputs[j] = &TxOutput{
+				Address: out.Address().String(),
+				Amount:  out.Amount(),
+			}
+		}
+	}
+
+	return tx
+}
+
+func NewTransactions(ledgerTxs []ledger.Transaction) []*Tx {
+	if len(ledgerTxs) == 0 {
+		return nil
+	}
+
+	result := make([]*Tx, len(ledgerTxs))
+	for i, x := range ledgerTxs {
+		result[i] = NewTransaction(x)
+	}
+
+	return result
 }
 
 func (fb FullBlock) String() string {

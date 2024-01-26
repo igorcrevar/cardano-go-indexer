@@ -41,15 +41,15 @@ type BlockIndexer struct {
 	unconfirmedBlocks        []*BlockHeader
 
 	db                  BlockIndexerDb
-	addressesOfInterest map[string]struct{}
+	addressesOfInterest map[string]bool
 }
 
 var _ BlockSyncerHandler = (*BlockIndexer)(nil)
 
 func NewBlockIndexer(config *BlockIndexerConfig, blockSyncer BlockSyncer, newConfirmedBlockHandler NewConfirmedBlockHandler, db BlockIndexerDb) *BlockIndexer {
-	addressesOfInterest := make(map[string]struct{}, len(config.AddressesOfInterest))
+	addressesOfInterest := make(map[string]bool, len(config.AddressesOfInterest))
 	for _, x := range config.AddressesOfInterest {
-		addressesOfInterest[x] = struct{}{}
+		addressesOfInterest[x] = true
 	}
 
 	return &BlockIndexer{
@@ -77,23 +77,7 @@ func (bi *BlockIndexer) RollBackwardFunc(point common.Point, tip chainsync.Tip) 
 		}
 	}
 
-	// latest block point not set -> this is normal behaviour if we were starting from genesis (nil)
-	if bi.latestBlockPoint == nil {
-		bi.latestBlockPoint = &BlockPoint{
-			BlockSlot:   point.Slot,
-			BlockHash:   point.Hash,
-			BlockNumber: 0,
-		}
-
-		// update database last block point
-		if err := bi.db.OpenTx().SetLatestBlockPoint(bi.latestBlockPoint).Execute(); err != nil {
-			return err
-		}
-
-		bi.unconfirmedBlocks = nil
-
-		return nil
-	} else if bi.latestBlockPoint.BlockSlot == point.Slot && bytes.Equal(bi.latestBlockPoint.BlockHash, point.Hash) {
+	if bi.latestBlockPoint.BlockSlot == point.Slot && bytes.Equal(bi.latestBlockPoint.BlockHash, point.Hash) {
 		// everything is ok -> we are reverting to the latest confirmed block
 		return nil
 	}
@@ -108,7 +92,10 @@ func (bi *BlockIndexer) RollForwardFunc(blockType uint, blockInfo interface{}, t
 		nextBlockNumber = bi.unconfirmedBlocks[len(bi.unconfirmedBlocks)-1].BlockNumber + 1
 	}
 
-	blockHeader := GetBlockHeaderFromBlockInfo(blockType, blockInfo, nextBlockNumber)
+	blockHeader, err := GetBlockHeaderFromBlockInfo(blockType, blockInfo, nextBlockNumber)
+	if err != nil {
+		return errors.Join(errBlockIndexerFatal, err)
+	}
 
 	fmt.Printf("roll forward: number = %d, hash = %s, tip block = %d, tip point = (%d, %s)\n",
 		blockHeader.BlockNumber, hex.EncodeToString(blockHeader.BlockHash), tip.BlockNumber, tip.Point.Slot, hex.EncodeToString(tip.Point.Hash))
@@ -204,7 +191,7 @@ func (bi *BlockIndexer) processNewConfirmedBlock(confirmedBlockHeader *BlockHead
 	if err != nil {
 		return nil, nil, err
 	} else if len(blockTransactions) > 0 {
-		fullBlock = GetFullBlock(confirmedBlockHeader, blockTransactions)
+		fullBlock = NewFullBlock(confirmedBlockHeader, NewTransactions(blockTransactions))
 
 		dbTx.AddConfirmedBlock(fullBlock)
 		bi.addTxOutputs(dbTx, fullBlock)
@@ -232,10 +219,13 @@ func (bi *BlockIndexer) getTxsOfInterest(txs []ledger.Transaction) (result []led
 	for _, tx := range txs {
 		if bi.isTxOutputOfInterest(tx) {
 			result = append(result, tx)
-		} else if is, err := bi.isTxInputOfInterest(tx); err != nil {
-			return nil, err
-		} else if is {
-			result = append(result, tx)
+		} else {
+			txIsGood, err := bi.isTxInputOfInterest(tx)
+			if err != nil {
+				return nil, err
+			} else if txIsGood {
+				result = append(result, tx)
+			}
 		}
 	}
 
@@ -245,7 +235,7 @@ func (bi *BlockIndexer) getTxsOfInterest(txs []ledger.Transaction) (result []led
 func (bi *BlockIndexer) isTxOutputOfInterest(tx ledger.Transaction) bool {
 	for _, out := range tx.Outputs() {
 		address := out.Address().String()
-		if _, exists := bi.addressesOfInterest[address]; exists {
+		if bi.addressesOfInterest[address] {
 			return true
 		}
 	}
@@ -261,11 +251,7 @@ func (bi *BlockIndexer) isTxInputOfInterest(tx ledger.Transaction) (bool, error)
 		})
 		if err != nil {
 			return false, err
-		} else if txOutput == nil {
-			continue
-		}
-
-		if _, exists := bi.addressesOfInterest[txOutput.Address]; exists {
+		} else if txOutput != nil && bi.addressesOfInterest[txOutput.Address] {
 			return true, nil
 		}
 	}
@@ -276,7 +262,7 @@ func (bi *BlockIndexer) isTxInputOfInterest(tx ledger.Transaction) (bool, error)
 func (bi *BlockIndexer) addTxOutputs(dbTx DbTransactionWriter, block *FullBlock) {
 	for _, tx := range block.Txs {
 		for ind, txOut := range tx.Outputs {
-			if _, exists := bi.addressesOfInterest[txOut.Address]; exists {
+			if bi.addressesOfInterest[txOut.Address] {
 				// add tx output to database
 				dbTx.AddTxOutput(TxInput{
 					Hash:  tx.Hash,
