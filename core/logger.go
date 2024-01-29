@@ -11,27 +11,26 @@ import (
 )
 
 type LoggerConfig struct {
-	LogLevel            hclog.Level
-	JSONLogFormat       bool
-	OpenOrCreateNewFile bool
-	LogsDirectory       string
-	LogFile             string
-	Name                string
+	LogLevel        hclog.Level
+	JSONLogFormat   bool
+	AppendOrNewFile bool
+	LogFilePath     string
+	Name            string
 }
 
 func NewLogger(config LoggerConfig) (l hclog.Logger, err error) {
 	var logFileWriter *os.File
 
-	if config.LogFile != "" {
-		fullFilePath := config.LogFile
+	if config.LogFilePath != "" {
+		fullFilePath := filepath.Base(config.LogFilePath)
 
-		if config.LogsDirectory != "" {
-			if dirErr := os.MkdirAll(config.LogsDirectory, os.ModePerm); dirErr == nil {
-				fullFilePath = filepath.Join(config.LogsDirectory, fullFilePath)
+		if dir := filepath.Dir(config.LogFilePath); dir != "/" && strings.TrimLeft(dir, ".") != "" {
+			if dirErr := os.MkdirAll(dir, os.ModePerm); dirErr == nil {
+				fullFilePath = filepath.Join(dir, fullFilePath)
 			}
 		}
 
-		if !config.OpenOrCreateNewFile {
+		if !config.AppendOrNewFile {
 			timestamp := strings.Replace(strings.Replace(time.Now().UTC().Format(time.RFC3339), ":", "_", -1), "-", "_", -1)
 			fullFilePath = fullFilePath + "_" + timestamp
 		}

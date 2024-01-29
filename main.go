@@ -37,11 +37,10 @@ func main() {
 	// }
 
 	logger, err := core.NewLogger(core.LoggerConfig{
-		LogLevel:            hclog.Info,
-		JSONLogFormat:       false,
-		OpenOrCreateNewFile: false,
-		LogsDirectory:       "logs",
-		LogFile:             "cardano_indexer",
+		LogLevel:        hclog.Info,
+		JSONLogFormat:   false,
+		AppendOrNewFile: false,
+		LogFilePath:     "logs/cardano_indexer",
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
