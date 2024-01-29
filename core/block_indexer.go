@@ -10,6 +10,7 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger"
 	"github.com/blinklabs-io/gouroboros/protocol/chainsync"
 	"github.com/blinklabs-io/gouroboros/protocol/common"
+	"github.com/hashicorp/go-hclog"
 )
 
 var (
@@ -42,11 +43,14 @@ type BlockIndexer struct {
 
 	db                  BlockIndexerDb
 	addressesOfInterest map[string]bool
+
+	logger hclog.Logger
 }
 
 var _ BlockSyncerHandler = (*BlockIndexer)(nil)
 
-func NewBlockIndexer(config *BlockIndexerConfig, blockSyncer BlockSyncer, newConfirmedBlockHandler NewConfirmedBlockHandler, db BlockIndexerDb) *BlockIndexer {
+func NewBlockIndexer(config *BlockIndexerConfig, newConfirmedBlockHandler NewConfirmedBlockHandler,
+	blockSyncer BlockSyncer, db BlockIndexerDb, logger hclog.Logger) *BlockIndexer {
 	addressesOfInterest := make(map[string]bool, len(config.AddressesOfInterest))
 	for _, x := range config.AddressesOfInterest {
 		addressesOfInterest[x] = true
@@ -63,6 +67,7 @@ func NewBlockIndexer(config *BlockIndexerConfig, blockSyncer BlockSyncer, newCon
 
 		db:                  db,
 		addressesOfInterest: addressesOfInterest,
+		logger:              logger,
 	}
 }
 
@@ -97,8 +102,8 @@ func (bi *BlockIndexer) RollForwardFunc(blockType uint, blockInfo interface{}, t
 		return errors.Join(errBlockIndexerFatal, err)
 	}
 
-	fmt.Printf("roll forward: number = %d, hash = %s, tip block = %d, tip point = (%d, %s)\n",
-		blockHeader.BlockNumber, hex.EncodeToString(blockHeader.BlockHash), tip.BlockNumber, tip.Point.Slot, hex.EncodeToString(tip.Point.Hash))
+	bi.logger.Debug("Roll forward", "number", blockHeader.BlockNumber,
+		"hash", hex.EncodeToString(blockHeader.BlockHash), "slot", tip.Point.Slot, "hash", hex.EncodeToString(tip.Point.Hash))
 
 	isFirstBlockConfirmed := uint(len(bi.unconfirmedBlocks)) >= bi.config.ConfirmationBlockCount
 
@@ -130,13 +135,14 @@ func (bi *BlockIndexer) RollForwardFunc(blockType uint, blockInfo interface{}, t
 }
 
 func (bi *BlockIndexer) ErrorHandler(err error) {
-	fmt.Printf("error retrieved: %v\n", err)
-
 	// retry syncing again if not fatal
 	if !errors.Is(err, errBlockIndexerFatal) {
+		bi.logger.Warn("Error happened", "err", err)
 		if err := bi.StartSyncing(); err != nil {
-			fmt.Printf("failed to retry syncing: %v\n", err)
+			bi.logger.Warn("Error happened while trying to restart syncer", "err", err)
 		}
+	} else {
+		bi.logger.Error("Fatal error happened", "err", err)
 	}
 }
 
