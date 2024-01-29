@@ -7,7 +7,9 @@
 *.dll
 *.so
 *.dylib
-burek.db
+*.db
+*.log
+/logs
 
 # Test binary, built with `go test -c`
 *.test

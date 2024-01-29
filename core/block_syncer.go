@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/hex"
 	"errors"
 	"strings"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/blinklabs-io/gouroboros/ledger"
 	"github.com/blinklabs-io/gouroboros/protocol/chainsync"
 	"github.com/blinklabs-io/gouroboros/protocol/common"
+	"github.com/hashicorp/go-hclog"
 )
 
 const (
@@ -29,15 +31,20 @@ type BlockSyncerHandler interface {
 
 type BlockSyncerImpl struct {
 	connection *ouroboros.Connection
+	logger     hclog.Logger
 }
 
 var _ BlockSyncer = (*BlockSyncerImpl)(nil)
 
-func NewBlockSyncer() *BlockSyncerImpl {
-	return &BlockSyncerImpl{}
+func NewBlockSyncer(logger hclog.Logger) *BlockSyncerImpl {
+	return &BlockSyncerImpl{
+		logger: logger,
+	}
 }
 
 func (bs *BlockSyncerImpl) Sync(networkMagic uint32, nodeAddress string, slot uint64, blockHash []byte, blockHandler BlockSyncerHandler) error {
+	bs.logger.Debug("Start syncing requested", "networkMagic", networkMagic, "address", nodeAddress, "slot", slot, "hash", hex.EncodeToString(blockHash))
+
 	if bs.connection != nil {
 		bs.connection.Close() // close previous connection
 	}
@@ -76,6 +83,8 @@ func (bs *BlockSyncerImpl) Sync(networkMagic uint32, nodeAddress string, slot ui
 		point = common.NewPoint(slot, blockHash)
 	}
 
+	bs.logger.Debug("Syncing started", "networkMagic", networkMagic, "address", nodeAddress, "slot", slot, "hash", hex.EncodeToString(blockHash))
+
 	// start syncing
 	if err := bs.connection.ChainSync().Client.Sync([]common.Point{point}); err != nil {
 		return err
@@ -103,6 +112,7 @@ func (bs *BlockSyncerImpl) Close() error {
 }
 
 func (bs *BlockSyncerImpl) GetFullBlock(slot uint64, hash []byte) (ledger.Block, error) {
+	bs.logger.Debug("Get full block", "slot", slot, "hash", hex.EncodeToString(hash), "connected", bs.connection != nil)
 	if bs.connection == nil {
 		return nil, errors.New("no connection")
 	}
