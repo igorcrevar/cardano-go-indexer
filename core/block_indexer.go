@@ -205,13 +205,13 @@ func (bi *BlockIndexer) processNewConfirmedBlock(confirmedBlockHeader *BlockHead
 
 		dbTx.AddConfirmedBlock(fullBlock)
 		if !bi.config.KeepAllTxOutputsInDb {
-			dbTx.RemoveTxOutputs(bi.getUsedUtxos(fullBlock.Txs))
+			dbTx.RemoveTxOutputs(bi.getTxInputs(fullBlock.Txs))
 			bi.addTxOutputsToDb(dbTx, fullBlock.Txs)
 		}
 	}
 
 	if bi.config.KeepAllTxOutputsInDb {
-		dbTx.RemoveTxOutputs(bi.getAllUsedUtxos(blockTransactions))
+		dbTx.RemoveTxOutputs(bi.getAllTxInputs(blockTransactions))
 		bi.addAllTxOutputsToDb(dbTx, blockTransactions)
 	}
 
@@ -305,7 +305,7 @@ func (bi *BlockIndexer) addAllTxOutputsToDb(dbTx DbTransactionWriter, txs []ledg
 	}
 }
 
-func (bi *BlockIndexer) getUsedUtxos(txs []*Tx) (res []*TxInput) {
+func (bi *BlockIndexer) getTxInputs(txs []*Tx) (res []*TxInput) {
 	for _, tx := range txs {
 		res = append(res, tx.Inputs...)
 	}
@@ -313,7 +313,7 @@ func (bi *BlockIndexer) getUsedUtxos(txs []*Tx) (res []*TxInput) {
 	return res
 }
 
-func (bi *BlockIndexer) getAllUsedUtxos(txs []ledger.Transaction) (res []*TxInput) {
+func (bi *BlockIndexer) getAllTxInputs(txs []ledger.Transaction) (res []*TxInput) {
 	for _, tx := range txs {
 		for _, inp := range tx.Inputs() {
 			res = append(res, &TxInput{
