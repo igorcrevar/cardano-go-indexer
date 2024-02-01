@@ -27,6 +27,8 @@ type BlockIndexerConfig struct {
 	ConfirmationBlockCount uint `json:"confirmationBlockCount"`
 
 	AddressesOfInterest []string `json:"addressesOfInterest"`
+
+	KeepAllTxOutputsInDb bool `json:"keepAllTxOutputsInDb"`
 }
 
 type NewConfirmedBlockHandler func(*FullBlock) error
@@ -196,11 +198,18 @@ func (bi *BlockIndexer) processNewConfirmedBlock(confirmedBlockHeader *BlockHead
 	blockTransactions, err := bi.getTxsOfInterest(block.Transactions())
 	if err != nil {
 		return nil, nil, err
-	} else if len(blockTransactions) > 0 {
+	}
+
+	if len(blockTransactions) > 0 {
 		fullBlock = NewFullBlock(confirmedBlockHeader, NewTransactions(blockTransactions))
 
 		dbTx.AddConfirmedBlock(fullBlock)
-		bi.addTxOutputs(dbTx, fullBlock)
+
+		if !bi.config.KeepAllTxOutputsInDb {
+			bi.addTxOutputsToDb(dbTx, fullBlock.Txs)
+		} else {
+			bi.addAllTxOutputsToDb(dbTx, blockTransactions)
+		}
 	}
 
 	latestBlockPoint := &BlockPoint{
@@ -265,8 +274,8 @@ func (bi *BlockIndexer) isTxInputOfInterest(tx ledger.Transaction) (bool, error)
 	return false, nil
 }
 
-func (bi *BlockIndexer) addTxOutputs(dbTx DbTransactionWriter, block *FullBlock) {
-	for _, tx := range block.Txs {
+func (bi *BlockIndexer) addTxOutputsToDb(dbTx DbTransactionWriter, txs []*Tx) {
+	for _, tx := range txs {
 		for ind, txOut := range tx.Outputs {
 			if bi.addressesOfInterest[txOut.Address] {
 				// add tx output to database
@@ -275,6 +284,20 @@ func (bi *BlockIndexer) addTxOutputs(dbTx DbTransactionWriter, block *FullBlock)
 					Index: uint32(ind),
 				}, txOut)
 			}
+		}
+	}
+}
+
+func (bi *BlockIndexer) addAllTxOutputsToDb(dbTx DbTransactionWriter, txs []ledger.Transaction) {
+	for _, tx := range txs {
+		for ind, txOut := range tx.Outputs() {
+			dbTx.AddTxOutput(TxInput{
+				Hash:  tx.Hash(),
+				Index: uint32(ind),
+			}, &TxOutput{
+				Address: txOut.Address().String(),
+				Amount:  txOut.Amount(),
+			})
 		}
 	}
 }
