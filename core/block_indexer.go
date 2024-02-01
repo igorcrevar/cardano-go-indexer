@@ -204,12 +204,15 @@ func (bi *BlockIndexer) processNewConfirmedBlock(confirmedBlockHeader *BlockHead
 		fullBlock = NewFullBlock(confirmedBlockHeader, NewTransactions(blockTransactions))
 
 		dbTx.AddConfirmedBlock(fullBlock)
-
 		if !bi.config.KeepAllTxOutputsInDb {
+			dbTx.RemoveTxOutputs(bi.getUsedUtxos(fullBlock.Txs))
 			bi.addTxOutputsToDb(dbTx, fullBlock.Txs)
-		} else {
-			bi.addAllTxOutputsToDb(dbTx, blockTransactions)
 		}
+	}
+
+	if bi.config.KeepAllTxOutputsInDb {
+		dbTx.RemoveTxOutputs(bi.getAllUsedUtxos(blockTransactions))
+		bi.addAllTxOutputsToDb(dbTx, blockTransactions)
 	}
 
 	latestBlockPoint := &BlockPoint{
@@ -300,4 +303,25 @@ func (bi *BlockIndexer) addAllTxOutputsToDb(dbTx DbTransactionWriter, txs []ledg
 			})
 		}
 	}
+}
+
+func (bi *BlockIndexer) getUsedUtxos(txs []*Tx) (res []*TxInput) {
+	for _, tx := range txs {
+		res = append(res, tx.Inputs...)
+	}
+
+	return res
+}
+
+func (bi *BlockIndexer) getAllUsedUtxos(txs []ledger.Transaction) (res []*TxInput) {
+	for _, tx := range txs {
+		for _, inp := range tx.Inputs() {
+			res = append(res, &TxInput{
+				Hash:  inp.Id().String(),
+				Index: inp.Index(),
+			})
+		}
+	}
+
+	return res
 }
