@@ -68,6 +68,21 @@ func (tw *BoltDbTransactionWriter) AddConfirmedBlock(block *core.FullBlock) core
 	return tw
 }
 
+func (tw *BoltDbTransactionWriter) RemoveTxOutputs(txInputs []*core.TxInput) core.DbTransactionWriter {
+	tw.operations = append(tw.operations, func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(txOutputsBucket)
+		for _, inp := range txInputs {
+			if err := bucket.Delete(inp.Key()); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	return tw
+}
+
 func (tw *BoltDbTransactionWriter) Execute() error {
 	defer func() {
 		tw.operations = nil
