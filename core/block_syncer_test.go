@@ -8,6 +8,7 @@ import (
 	"github.com/blinklabs-io/gouroboros/protocol/chainsync"
 	"github.com/blinklabs-io/gouroboros/protocol/common"
 	"github.com/hashicorp/go-hclog"
+	"github.com/stretchr/testify/require"
 )
 
 type BlockSyncerHandlerMock struct{}
@@ -33,17 +34,15 @@ const (
 func TestNewBlockSyncerWithUninitializedLogger(t *testing.T) {
 	var logger hclog.Logger
 
-	if syncer := NewBlockSyncer(logger); syncer == nil {
-		t.Fatalf("got NewBlockSyncer(uninitializedLogger) = %v; want = &BlockSyncer", syncer)
-	}
+	syncer := NewBlockSyncer(logger)
+	require.NotNil(t, syncer)
 }
 
 func TestNewBlockSyncerWithInitializedLogger(t *testing.T) {
 	logger := hclog.Default()
 
-	if syncer := NewBlockSyncer(logger); syncer == nil {
-		t.Fatalf("got NewBlockSyncer(initializedLogger) = %v; want = &BlockSyncer", syncer)
-	}
+	syncer := NewBlockSyncer(logger)
+	require.NotNil(t, syncer)
 }
 
 func TestSyncWrongMagic(t *testing.T) {
@@ -52,9 +51,8 @@ func TestSyncWrongMagic(t *testing.T) {
 
 	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
 	defer syncer.Close()
-	if err := syncer.Sync(71, NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler); err == nil {
-		t.Fatalf("got syncer.Sync(71, NodeAddress, ExistingPointSlot, existingPointHash, mockSyncerBlockHandler) = %v; want = handshake: refused", err)
-	}
+	err := syncer.Sync(71, NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler)
+	require.NotNil(t, err)
 }
 
 func TestSyncWrongNodeAddress(t *testing.T) {
@@ -63,9 +61,8 @@ func TestSyncWrongNodeAddress(t *testing.T) {
 
 	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
 	defer syncer.Close()
-	if err := syncer.Sync(NetworkMagic, "test", ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler); err == nil {
-		t.Fatalf(`got syncer.Sync(NetworkMagic, "test", ExistingPointSlot, existingPointHash, mockSyncerBlockHandler) = %v; want = dial tcp`, err)
-	}
+	err := syncer.Sync(NetworkMagic, "test", ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler)
+	require.NotNil(t, err)
 }
 
 func TestSyncWrongUnixNodeAddress(t *testing.T) {
@@ -74,9 +71,8 @@ func TestSyncWrongUnixNodeAddress(t *testing.T) {
 
 	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
 	defer syncer.Close()
-	if err := syncer.Sync(NetworkMagic, "/"+NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler); err == nil {
-		t.Fatalf(`got syncer.Sync(NetworkMagic, "/"+NodeAddress, ExistingPointSlot, existingPointHash, mockSyncerBlockHandler) = %v; want = dial unix`, err)
-	}
+	err := syncer.Sync(NetworkMagic, "/"+NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler)
+	require.NotNil(t, err)
 }
 
 func TestSyncNonExistingSlot(t *testing.T) {
@@ -85,9 +81,8 @@ func TestSyncNonExistingSlot(t *testing.T) {
 
 	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
 	defer syncer.Close()
-	if err := syncer.Sync(NetworkMagic, NodeAddress, NonExistingPointSlot, existingPointHash, &mockSyncerBlockHandler); err == nil {
-		t.Fatalf("got syncer.Sync(NetworkMagic, NodeAddress, NonExistingPointSlot, existingPointHash, mockSyncerBlockHandler) = %v; want = chain intersection not found", err)
-	}
+	err := syncer.Sync(NetworkMagic, NodeAddress, NonExistingPointSlot, existingPointHash, &mockSyncerBlockHandler)
+	require.NotNil(t, err)
 }
 
 func TestSyncNonExistingHash(t *testing.T) {
@@ -96,9 +91,8 @@ func TestSyncNonExistingHash(t *testing.T) {
 
 	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
 	defer syncer.Close()
-	if err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, nonExistingPointHash, &mockSyncerBlockHandler); err == nil {
-		t.Fatalf("got syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, nonExistingPointHash, mockSyncerBlockHandler) = %v; want = chain intersection not found", err)
-	}
+	err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, nonExistingPointHash, &mockSyncerBlockHandler)
+	require.NotNil(t, err)
 }
 
 func TestSyncEmptyHash(t *testing.T) {
@@ -107,9 +101,8 @@ func TestSyncEmptyHash(t *testing.T) {
 
 	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
 	defer syncer.Close()
-	if err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, emptyHash, &mockSyncerBlockHandler); err != nil {
-		t.Fatalf("got syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, emptyHash, mockSyncerBlockHandler) = %v; want = nil", err)
-	}
+	err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, emptyHash, &mockSyncerBlockHandler)
+	require.Nil(t, err)
 }
 
 func TestSync(t *testing.T) {
@@ -118,9 +111,8 @@ func TestSync(t *testing.T) {
 
 	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
 	defer syncer.Close()
-	if err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler); err != nil {
-		t.Fatalf("got syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, existingPointHash, mockSyncerBlockHandler) = %v; want = nil", err)
-	}
+	err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler)
+	require.Nil(t, err)
 }
 
 func TestSyncWithExistingConnection(t *testing.T) {
@@ -135,17 +127,15 @@ func TestSyncWithExistingConnection(t *testing.T) {
 
 	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
 	defer syncer.Close()
-	if err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler); err != nil {
-		t.Fatalf("got syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, existingPointHash, mockSyncerBlockHandler) = %v; want = nil", err)
-	}
+	err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler)
+	require.Nil(t, err)
 }
 
 func TestCloseWithConnectionNil(t *testing.T) {
 	syncer := NewBlockSyncer(nil)
 
-	if err := syncer.Close(); err != nil {
-		t.Fatalf("got syncer.Close() = %v; want = nil", err)
-	}
+	err := syncer.Close()
+	require.Nil(t, err)
 }
 
 func TestCloseWithConnectionNotNil(t *testing.T) {
@@ -157,9 +147,8 @@ func TestCloseWithConnectionNotNil(t *testing.T) {
 	)
 	syncer.connection = connection
 
-	if err := syncer.Close(); err != nil {
-		t.Fatalf("got syncer.Close() = %v; want = nil", err)
-	}
+	err := syncer.Close()
+	require.Nil(t, err)
 }
 
 func TestGetFullBlockWithConnectionNil(t *testing.T) {
@@ -167,9 +156,9 @@ func TestGetFullBlockWithConnectionNil(t *testing.T) {
 
 	var slot uint64
 	var hash []byte
-	if _, err := syncer.GetFullBlock(slot, hash); err == nil {
-		t.Fatalf("got syncer.GetFullBlock(slot, hash) = (_, %v); want = (_, no connection)", err)
-	}
+
+	_, err := syncer.GetFullBlock(slot, hash)
+	require.NotNil(t, err)
 }
 
 func TestGetFullBlockWithConnectionNotNilExisting(t *testing.T) {
@@ -179,28 +168,26 @@ func TestGetFullBlockWithConnectionNotNilExisting(t *testing.T) {
 	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
 	defer syncer.Close()
 	// .GetFullBlock panics without full initialize from .Sync
-	if err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler); err != nil {
-		panic("failed to start sync")
-	}
+	err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler)
+	require.Nil(t, err, "failed to start sync")
 
-	if block, err := syncer.GetFullBlock(ExistingPointSlot, existingPointHash); block == nil || err != nil {
-		t.Fatalf("got syncer.GetFullBlock(ExistingPointSlot, existingPointHash) = (%v, %v); want = (block, nil)", block, err)
-	}
+	block, err := syncer.GetFullBlock(ExistingPointSlot, existingPointHash)
+	require.NotNil(t, block)
+	require.Nil(t, err)
 }
 
 func TestGetFullBlockWithConnectionNotNilNotExisting(t *testing.T) {
 	syncer := NewBlockSyncer(hclog.Default())
-	existingHash, _ := hex.DecodeString(ExistingPointHashStr)
+	existingPointHash, _ := hex.DecodeString(ExistingPointHashStr)
 	nonExistingPointHash, _ := hex.DecodeString(NonExistingPointHashStr)
 
 	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
 	defer syncer.Close()
 	// .GetFullBlock panics without full initialize from .Sync
-	if err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, existingHash, &mockSyncerBlockHandler); err != nil {
-		panic("failed to start sync")
-	}
+	err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler)
+	require.Nil(t, err, "failed to start sync")
 
-	if block, err := syncer.GetFullBlock(NonExistingPointSlot, nonExistingPointHash); block != nil || err == nil {
-		t.Fatalf("got syncer.GetFullBlock(NonExistingPointSlot, nonExistingPointHash) = (%v, %v); want = (nil, block(s) not found)", block, err)
-	}
+	block, err := syncer.GetFullBlock(NonExistingPointSlot, nonExistingPointHash)
+	require.Nil(t, block)
+	require.NotNil(t, err)
 }
