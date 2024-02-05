@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/blinklabs-io/gouroboros/ledger"
+	"github.com/blinklabs-io/gouroboros/protocol/chainsync"
+	"github.com/blinklabs-io/gouroboros/protocol/common"
 	"github.com/hashicorp/go-hclog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -75,6 +77,11 @@ func (m *MockDbTransactionWriter) AddTxOutput(input TxInput, output *TxOutput) D
 	return m
 }
 
+func (m *MockDbTransactionWriter) RemoveTxOutputs(txInputs []*TxInput) DbTransactionWriter {
+	m.Called(txInputs)
+	return m
+}
+
 func (m *MockDbTransactionWriter) Execute() error {
 	return nil
 }
@@ -87,8 +94,6 @@ func TestNewBlockIndexer(t *testing.T) {
 
 	blockIndexer := NewBlockIndexer(config, nil, mockBlockSyncer, mockDb, mockLogger)
 
-	//mockDb.On("GetLatestBlockPoint").Return(GetDummyBlockPoint(), nil)
-
 	// Assertions
 	assert.NotNil(t, blockIndexer)
 	assert.Equal(t, config, blockIndexer.config)
@@ -97,25 +102,68 @@ func TestNewBlockIndexer(t *testing.T) {
 	assert.NotNil(t, blockIndexer.logger)
 }
 
-func TestRollBackwardFunc(t *testing.T) {
-	assert.Equal(t, 1, 1)
-	// TODO: Implement RollBackwardFunc test cases
+func TestRollBackwardFunc_Unconfirmed(t *testing.T) {
+	config := GetDummyConfig()
+
+	blockIndexer := NewBlockIndexer(config, nil, nil, nil, nil)
+
+	blockIndexer.latestBlockPoint = GetDummyBlockPoint(10, "1", 1)
+	blockIndexer.unconfirmedBlocks = []*BlockHeader{
+		GetDummyBlockHeader(20, "2", 2),
+		GetDummyBlockHeader(30, "3", 3),
+		GetDummyBlockHeader(40, "4", 4),
+		GetDummyBlockHeader(50, "5", 5),
+		GetDummyBlockHeader(60, "6", 6),
+	}
+
+	point := GetDummyBlockPoint(30, "3", 3)
+	cardano_point := common.NewPoint(point.BlockSlot, point.BlockHash)
+
+	err := blockIndexer.RollBackwardFunc(cardano_point, chainsync.Tip{})
+
+	assert.NoError(t, err)
+	assert.EqualValues(t, blockIndexer.unconfirmedBlocks, []*BlockHeader{
+		GetDummyBlockHeader(20, "2", 2),
+		GetDummyBlockHeader(30, "3", 3),
+	})
+}
+
+func TestRollBackwardFunc_LatestBlock(t *testing.T) {
+	config := GetDummyConfig()
+
+	blockIndexer := NewBlockIndexer(config, nil, nil, nil, nil)
+
+	blockIndexer.latestBlockPoint = GetDummyBlockPoint(10, "1", 1)
+	blockIndexer.unconfirmedBlocks = []*BlockHeader{
+		GetDummyBlockHeader(20, "2", 2),
+		GetDummyBlockHeader(30, "3", 3),
+		GetDummyBlockHeader(40, "4", 4),
+		GetDummyBlockHeader(50, "5", 5),
+		GetDummyBlockHeader(60, "6", 6),
+	}
+
+	point := GetDummyBlockPoint(10, "1", 1)
+	cardano_point := common.NewPoint(point.BlockSlot, point.BlockHash)
+
+	err := blockIndexer.RollBackwardFunc(cardano_point, chainsync.Tip{})
+
+	assert.NoError(t, err)
+	assert.EqualValues(t, blockIndexer.unconfirmedBlocks, []*BlockHeader{
+		GetDummyBlockHeader(20, "2", 2),
+		GetDummyBlockHeader(30, "3", 3),
+		GetDummyBlockHeader(40, "4", 4),
+		GetDummyBlockHeader(50, "5", 5),
+		GetDummyBlockHeader(60, "6", 6),
+	})
 }
 
 // TODO get blockinfo and tip objects from cardano chain
 func TestRollForwardFunc(t *testing.T) {
-	mockBlockSyncer := new(MockBlockSyncer)
-	mockDb := new(MockBlockIndexerDb)
-	mockLogger := hclog.NewNullLogger()
 	config := GetDummyConfig()
 
-	blockIndexer := NewBlockIndexer(config, nil, mockBlockSyncer, mockDb, mockLogger)
+	blockIndexer := NewBlockIndexer(config, nil, nil, nil, nil)
 
-	// blockIndexer.RollForwardFunc(7, nil, nil)
-
-	assert.NotNil(t, blockIndexer.unconfirmedBlocks)
-	assert.Equal(t, len(blockIndexer.unconfirmedBlocks), 1)
-	assert.EqualValues(t, blockIndexer.unconfirmedBlocks[0], &BlockHeader{})
+	_ = blockIndexer.RollForwardFunc(1, nil, chainsync.Tip{})
 
 	// BlockNumber
 	// BlockHash
@@ -130,19 +178,36 @@ func TestRollForwardFunc(t *testing.T) {
 }
 
 func TestProcessNewConfirmedBlock(t *testing.T) {
-	// TODO: Implement ProcessNewConfirmedBlock test cases
 }
 
 func TestGetTxsOfInterest(t *testing.T) {
-	// TODO: Implement GetTxsOfInterest test cases
+	// TODO: Combine tx input and output interest test
 }
 
 func TestIsTxOutputOfInterest(t *testing.T) {
-	// TODO: Implement IsTxOutputOfInterest test cases
+	config := GetDummyConfig()
+	blockIndexer := NewBlockIndexer(config, nil, nil, nil, nil)
+	tx := GetDummyShelleyTransaction()
+
+	isTxOfInterest := blockIndexer.isTxOutputOfInterest(tx)
+
+	assert.NotNil(t, blockIndexer.addressesOfInterest)
+	assert.Equal(t, len(blockIndexer.addressesOfInterest), 2)
+
+	assert.True(t, isTxOfInterest)
 }
 
 func TestIsTxInputOfInterest(t *testing.T) {
-	// TODO: Implement IsTxInputOfInterest test cases
+	config := GetDummyConfig()
+	blockIndexer := NewBlockIndexer(config, nil, nil, nil, nil)
+	tx := GetDummyShelleyTransaction()
+
+	isTxOfInterest, _ := blockIndexer.isTxInputOfInterest(tx)
+
+	assert.NotNil(t, blockIndexer.addressesOfInterest)
+	assert.Equal(t, len(blockIndexer.addressesOfInterest), 2)
+
+	assert.True(t, isTxOfInterest)
 }
 
 func TestAddTxOutputs(t *testing.T) {
@@ -152,11 +217,11 @@ func TestAddTxOutputs(t *testing.T) {
 	config := GetDummyConfig()
 
 	mockTxWritter := NewMockDbTransactionWriter()
-	dummyBlock := GetDummyFullBlock()
+	dummyBlock := GetDummyFullBlock(1, "1", 1)
 
 	blockIndexer := NewBlockIndexer(config, nil, mockBlockSyncer, mockDb, mockLogger)
 
-	blockIndexer.addTxOutputs(mockTxWritter, dummyBlock)
+	blockIndexer.addTxOutputsToDb(mockTxWritter, dummyBlock.Txs)
 	mockTxWritter.Execute()
 
 	// Assertions
@@ -171,33 +236,59 @@ func GetDummyConfig() *BlockIndexerConfig {
 		NodeAddress:            "localhost:3000",
 		StartingBlockPoint:     nil,
 		ConfirmationBlockCount: 10,
-		AddressesOfInterest:    []string{"dummy_addr1", "dummy_addr2"},
+		AddressesOfInterest: []string{
+			"addr1qxaww0anyepl07pzdfm64pfk6xcm54kputjhnmqa9ku0d67jj9djsz0020h68nz3rxknzdh93nryqzhq6h9z0nnzf0rsfus4er",
+			"addr1q900xuw7xruv836lks0hjyymwy9ft42x5mz0u387t9k3g50wv7ptw26llr0alv8n875rc8fw9ljyz5pxzxl8hgg8g3csdwghnl",
+		},
 	}
 }
 
-func GetDummyBlockPoint() *BlockPoint {
+func GetDummyShelleyTransaction() *ledger.ShelleyTransaction {
+	address, _ := ledger.NewAddress("addr1qxaww0anyepl07pzdfm64pfk6xcm54kputjhnmqa9ku0d67jj9djsz0020h68nz3rxknzdh93nryqzhq6h9z0nnzf0rsfus4er")
+	// address2, _ := ledger.NewAddress("addr1q900xuw7xruv836lks0hjyymwy9ft42x5mz0u387t9k3g50wv7ptw26llr0alv8n875rc8fw9ljyz5pxzxl8hgg8g3csdwghnl")
+
+	return &ledger.ShelleyTransaction{
+		Body: ledger.ShelleyTransactionBody{
+			TxOutputs: []ledger.ShelleyTransactionOutput{
+				{
+					OutputAddress: address,
+					OutputAmount:  1000,
+				},
+			},
+			TxInputs: []ledger.ShelleyTransactionInput{
+				{
+					// TODO: make tx id
+					TxId:        ledger.NewBlake2b256([]byte{}),
+					OutputIndex: 1,
+				},
+			},
+		},
+	}
+}
+
+func GetDummyBlockPoint(slot uint64, hash_ext string, block uint64) *BlockPoint {
 	return &BlockPoint{
-		BlockSlot:   1,
-		BlockHash:   []byte("34c36a9eb7228ca529e91babcf2215be29ce2a65b609540b483abc4520848d19"),
-		BlockNumber: 1,
+		BlockSlot:   slot,
+		BlockHash:   []byte("34c36a9eb7228ca529e91babcf2215be29ce2a65b609540b483abc4520848d1" + hash_ext),
+		BlockNumber: block,
 	}
 }
 
-func GetDummyBlockHeader() *BlockHeader {
+func GetDummyBlockHeader(slot uint64, hash_ext string, block uint64) *BlockHeader {
 	return &BlockHeader{
-		BlockSlot:   1,
-		BlockHash:   []byte("34c36a9eb7228ca529e91babcf2215be29ce2a65b609540b483abc4520848d19"),
-		BlockNumber: 1,
+		BlockSlot:   slot,
+		BlockHash:   []byte("34c36a9eb7228ca529e91babcf2215be29ce2a65b609540b483abc4520848d1" + hash_ext),
+		BlockNumber: block,
 		EraID:       2,
 		EraName:     "DummyEra",
 	}
 }
 
-func GetDummyFullBlock() *FullBlock {
+func GetDummyFullBlock(slot uint64, hash_ext string, block uint64) *FullBlock {
 	return &FullBlock{
-		BlockSlot:   1,
-		BlockHash:   []byte("34c36a9eb7228ca529e91babcf2215be29ce2a65b609540b483abc4520848d19"),
-		BlockNumber: 1,
+		BlockSlot:   slot,
+		BlockHash:   []byte("34c36a9eb7228ca529e91babcf2215be29ce2a65b609540b483abc4520848d1" + hash_ext),
+		BlockNumber: block,
 		EraID:       2,
 		EraName:     "DummyEra",
 		Txs: []*Tx{
@@ -216,7 +307,7 @@ func GetDummyFullBlock() *FullBlock {
 				},
 				Outputs: []*TxOutput{
 					{
-						Address: "dummy_addr1",
+						Address: "addr1qxaww0anyepl07pzdfm64pfk6xcm54kputjhnmqa9ku0d67jj9djsz0020h68nz3rxknzdh93nryqzhq6h9z0nnzf0rsfus4er",
 						Amount:  1000,
 					},
 					{
