@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math"
 	"os"
@@ -25,22 +26,22 @@ func main() {
 	address = "preprod-node.play.dev.cardano.org:3001"
 	networkMagic = 1
 
-	//for main net
-	// address = "backbone.cardano-mainnet.iohk.io:3001"
-	// networkMagic = uint32(764824073)
+	// for main net
+	address = "backbone.cardano-mainnet.iohk.io:3001"
+	networkMagic = uint32(764824073)
 
-	// startBlockHash, _ = hex.DecodeString("5d9435abf2a829142aaae08720afa05980efaa6ad58e47ebd4cffadc2f3c45d8")
-	// startSlot = uint64(76592549)
-	// startBlockNum = 7999980
-	// addressesOfInterest = []string{
-	// 	"addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd",
-	// }
+	startBlockHash, _ = hex.DecodeString("5d9435abf2a829142aaae08720afa05980efaa6ad58e47ebd4cffadc2f3c45d8")
+	startSlot = uint64(76592549)
+	startBlockNum = 7999980
+	addressesOfInterest = []string{
+		"addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd",
+	}
 
 	logger, err := core.NewLogger(core.LoggerConfig{
-		LogLevel:        hclog.Info,
-		JSONLogFormat:   false,
-		AppendOrNewFile: false,
-		LogFilePath:     "logs/cardano_indexer",
+		LogLevel:      hclog.Debug,
+		JSONLogFormat: false,
+		AppendFile:    true,
+		LogFilePath:   "logs/cardano_indexer",
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -70,6 +71,7 @@ func main() {
 			BlockHash:   startBlockHash,
 			BlockNumber: startBlockNum,
 		},
+		AddressCheck:           core.AddressCheckAll,
 		ConfirmationBlockCount: 10,
 		AddressesOfInterest:    addressesOfInterest,
 	}, confirmedBlockHandler, syncer, db, logger.Named("block_indexer"))

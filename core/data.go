@@ -51,6 +51,11 @@ type TxOutput struct {
 	Amount  uint64 `json:"amount"`
 }
 
+type TxInputOutput struct {
+	Input  *TxInput
+	Output *TxOutput
+}
+
 func GetBlockHeaderFromBlockInfo(blockType uint, blockInfo interface{}, nextBlockNumber uint64) (*BlockHeader, error) {
 	var blockHeaderFull ledger.BlockHeader
 

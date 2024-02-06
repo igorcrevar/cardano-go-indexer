@@ -17,6 +17,13 @@ var (
 	errBlockIndexerFatal = errors.New("block indexer fatal error")
 )
 
+const (
+	AddressCheckNone    = 0         // No flags
+	AddressCheckInputs  = 1 << iota // 1 << 0 = 1
+	AddressCheckOutputs             // 1 << 1 = 2
+	AddressCheckAll     = AddressCheckInputs | AddressCheckOutputs
+)
+
 type BlockIndexerConfig struct {
 	NetworkMagic uint32 `json:"networkMagic"`
 	NodeAddress  string `json:"nodeAddress"`
@@ -29,6 +36,8 @@ type BlockIndexerConfig struct {
 	AddressesOfInterest []string `json:"addressesOfInterest"`
 
 	KeepAllTxOutputsInDb bool `json:"keepAllTxOutputsInDb"`
+
+	AddressCheck int `json:"addressCheck"`
 }
 
 type NewConfirmedBlockHandler func(*FullBlock) error
@@ -53,6 +62,10 @@ var _ BlockSyncerHandler = (*BlockIndexer)(nil)
 
 func NewBlockIndexer(config *BlockIndexerConfig, newConfirmedBlockHandler NewConfirmedBlockHandler,
 	blockSyncer BlockSyncer, db BlockIndexerDb, logger hclog.Logger) *BlockIndexer {
+	if config.AddressCheck&AddressCheckAll == 0 {
+		panic("block indexer must at least check outputs or inputs") //nolint:gocritic
+	}
+
 	addressesOfInterest := make(map[string]bool, len(config.AddressesOfInterest))
 	for _, x := range config.AddressesOfInterest {
 		addressesOfInterest[x] = true
@@ -107,26 +120,22 @@ func (bi *BlockIndexer) RollForwardFunc(blockType uint, blockInfo interface{}, t
 	bi.logger.Debug("Roll forward", "number", blockHeader.BlockNumber,
 		"hash", hex.EncodeToString(blockHeader.BlockHash), "slot", tip.Point.Slot, "hash", hex.EncodeToString(tip.Point.Hash))
 
-	isFirstBlockConfirmed := uint(len(bi.unconfirmedBlocks)) >= bi.config.ConfirmationBlockCount
+	if uint(len(bi.unconfirmedBlocks)) < bi.config.ConfirmationBlockCount {
+		// If there are not enough children blocks to promote the first one to the confirmed state, a new block header is added, and the function returns
+		bi.unconfirmedBlocks = append(bi.unconfirmedBlocks, blockHeader)
 
-	var confirmedBlockHeader *BlockHeader
-	if isFirstBlockConfirmed {
-		confirmedBlockHeader = bi.unconfirmedBlocks[0]
+		return nil
 	}
 
-	fullBlock, latestBlockPoint, err := bi.processNewConfirmedBlock(confirmedBlockHeader)
+	fullBlock, latestBlockPoint, err := bi.processConfirmedBlock(bi.unconfirmedBlocks[0])
 	if err != nil {
 		return err
 	}
 
-	if isFirstBlockConfirmed {
-		// update latest block point in memory if we have confirmed block
-		bi.latestBlockPoint = latestBlockPoint
-		// remove first block from unconfirmed list. copy whole list because we do not want memory leak
-		bi.unconfirmedBlocks = append([]*BlockHeader(nil), bi.unconfirmedBlocks[1:]...)
-	}
-
-	bi.unconfirmedBlocks = append(bi.unconfirmedBlocks, blockHeader)
+	// update latest block point in memory if we have confirmed block
+	bi.latestBlockPoint = latestBlockPoint
+	// remove first block from unconfirmed list. copy whole list because we do not want memory leak
+	bi.unconfirmedBlocks = append(append([]*BlockHeader(nil), bi.unconfirmedBlocks[1:]...), blockHeader)
 
 	// notify listener if needed
 	if fullBlock != nil {
@@ -178,7 +187,7 @@ func (bi *BlockIndexer) Close() error {
 	return bi.blockSyncer.Close()
 }
 
-func (bi *BlockIndexer) processNewConfirmedBlock(confirmedBlockHeader *BlockHeader) (*FullBlock, *BlockPoint, error) {
+func (bi *BlockIndexer) processConfirmedBlock(confirmedBlockHeader *BlockHeader) (*FullBlock, *BlockPoint, error) {
 	if confirmedBlockHeader == nil {
 		return nil, bi.latestBlockPoint, nil
 	}
@@ -188,31 +197,33 @@ func (bi *BlockIndexer) processNewConfirmedBlock(confirmedBlockHeader *BlockHead
 		return nil, nil, err
 	}
 
-	var fullBlock *FullBlock = nil
+	var (
+		fullBlock         *FullBlock = nil
+		txOutputsToSave   []*TxInputOutput
+		txOutputsToRemove []*TxInput
 
-	// open database tx
-	dbTx := bi.db.OpenTx()
+		allBlockTransactions = block.Transactions()
+		dbTx                 = bi.db.OpenTx() // open database tx
+	)
 
 	// get all transactions of interesy from block
-	// if there is none, we do not need to process this block further
-	blockTransactions, err := bi.getTxsOfInterest(block.Transactions())
+	txsOfInterest, err := bi.getTxsOfInterest(allBlockTransactions)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	if len(blockTransactions) > 0 {
-		fullBlock = NewFullBlock(confirmedBlockHeader, NewTransactions(blockTransactions))
-
-		dbTx.AddConfirmedBlock(fullBlock)
-		if !bi.config.KeepAllTxOutputsInDb {
-			dbTx.RemoveTxOutputs(bi.getTxInputs(fullBlock.Txs))
-			bi.addTxOutputsToDb(dbTx, fullBlock.Txs)
-		}
+	if bi.config.KeepAllTxOutputsInDb {
+		txOutputsToSave = bi.getAllTxOutputs(allBlockTransactions)
+		txOutputsToRemove = bi.getAllTxInputs(allBlockTransactions)
+	} else {
+		txOutputsToSave = bi.getTxOutputsOfInterest(txsOfInterest)
+		txOutputsToRemove = bi.getTxInputs(txsOfInterest)
 	}
 
-	if bi.config.KeepAllTxOutputsInDb {
-		dbTx.RemoveTxOutputs(bi.getAllTxInputs(blockTransactions))
-		bi.addAllTxOutputsToDb(dbTx, blockTransactions)
+	// add confirmed block to db and create full block only if there are some transactions of interest
+	if len(txsOfInterest) > 0 {
+		fullBlock = NewFullBlock(confirmedBlockHeader, txsOfInterest)
+		dbTx.AddConfirmedBlock(fullBlock) // add confirmed block in db tx (dbTx implementation should handle nil case)
 	}
 
 	latestBlockPoint := &BlockPoint{
@@ -220,8 +231,10 @@ func (bi *BlockIndexer) processNewConfirmedBlock(confirmedBlockHeader *BlockHead
 		BlockHash:   confirmedBlockHeader.BlockHash,
 		BlockNumber: confirmedBlockHeader.BlockNumber,
 	}
+	dbTx.SetLatestBlockPoint(latestBlockPoint)                            // update latest block point in db tx
+	dbTx.AddTxOutputs(txOutputsToSave).RemoveTxOutputs(txOutputsToRemove) // add all needed outputs, remove used ones in db tx
+
 	// update database -> execute db transaction
-	dbTx.SetLatestBlockPoint(bi.latestBlockPoint)
 	if err := dbTx.Execute(); err != nil {
 		return nil, nil, err
 	}
@@ -229,20 +242,20 @@ func (bi *BlockIndexer) processNewConfirmedBlock(confirmedBlockHeader *BlockHead
 	return fullBlock, latestBlockPoint, nil
 }
 
-func (bi *BlockIndexer) getTxsOfInterest(txs []ledger.Transaction) (result []ledger.Transaction, err error) {
+func (bi *BlockIndexer) getTxsOfInterest(txs []ledger.Transaction) (result []*Tx, err error) {
 	if len(bi.addressesOfInterest) == 0 {
-		return txs, nil
+		return NewTransactions(txs), nil
 	}
 
 	for _, tx := range txs {
 		if bi.isTxOutputOfInterest(tx) {
-			result = append(result, tx)
+			result = append(result, NewTransaction(tx))
 		} else {
 			txIsGood, err := bi.isTxInputOfInterest(tx)
 			if err != nil {
 				return nil, err
 			} else if txIsGood {
-				result = append(result, tx)
+				result = append(result, NewTransaction(tx))
 			}
 		}
 	}
@@ -251,6 +264,10 @@ func (bi *BlockIndexer) getTxsOfInterest(txs []ledger.Transaction) (result []led
 }
 
 func (bi *BlockIndexer) isTxOutputOfInterest(tx ledger.Transaction) bool {
+	if bi.config.AddressCheck&AddressCheckOutputs == 0 {
+		return false
+	}
+
 	for _, out := range tx.Outputs() {
 		address := out.Address().String()
 		if bi.addressesOfInterest[address] {
@@ -262,6 +279,10 @@ func (bi *BlockIndexer) isTxOutputOfInterest(tx ledger.Transaction) bool {
 }
 
 func (bi *BlockIndexer) isTxInputOfInterest(tx ledger.Transaction) (bool, error) {
+	if bi.config.AddressCheck&AddressCheckInputs == 0 {
+		return false, nil
+	}
+
 	for _, inp := range tx.Inputs() {
 		txOutput, err := bi.db.GetTxOutput(TxInput{
 			Hash:  inp.Id().String(),
@@ -277,35 +298,54 @@ func (bi *BlockIndexer) isTxInputOfInterest(tx ledger.Transaction) (bool, error)
 	return false, nil
 }
 
-func (bi *BlockIndexer) addTxOutputsToDb(dbTx DbTransactionWriter, txs []*Tx) {
+func (bi *BlockIndexer) getTxOutputsOfInterest(txs []*Tx) (res []*TxInputOutput) {
+	// return empty slice if we do not check inputs
+	if bi.config.AddressCheck&AddressCheckInputs == 0 {
+		return nil
+	}
+
 	for _, tx := range txs {
 		for ind, txOut := range tx.Outputs {
 			if bi.addressesOfInterest[txOut.Address] {
-				// add tx output to database
-				dbTx.AddTxOutput(TxInput{
-					Hash:  tx.Hash,
-					Index: uint32(ind),
-				}, txOut)
+				res = append(res, &TxInputOutput{
+					Input: &TxInput{
+						Hash:  tx.Hash,
+						Index: uint32(ind),
+					},
+					Output: txOut,
+				})
 			}
 		}
 	}
+
+	return res
 }
 
-func (bi *BlockIndexer) addAllTxOutputsToDb(dbTx DbTransactionWriter, txs []ledger.Transaction) {
+func (bi *BlockIndexer) getAllTxOutputs(txs []ledger.Transaction) (res []*TxInputOutput) {
 	for _, tx := range txs {
 		for ind, txOut := range tx.Outputs() {
-			dbTx.AddTxOutput(TxInput{
-				Hash:  tx.Hash(),
-				Index: uint32(ind),
-			}, &TxOutput{
-				Address: txOut.Address().String(),
-				Amount:  txOut.Amount(),
+			res = append(res, &TxInputOutput{
+				Input: &TxInput{
+					Hash:  tx.Hash(),
+					Index: uint32(ind),
+				},
+				Output: &TxOutput{
+					Address: txOut.Address().String(),
+					Amount:  txOut.Amount(),
+				},
 			})
 		}
 	}
+
+	return res
 }
 
 func (bi *BlockIndexer) getTxInputs(txs []*Tx) (res []*TxInput) {
+	// return empty slice if we do not check inputs
+	if bi.config.AddressCheck&AddressCheckInputs == 0 {
+		return nil
+	}
+
 	for _, tx := range txs {
 		res = append(res, tx.Inputs...)
 	}
