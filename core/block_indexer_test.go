@@ -638,15 +638,38 @@ func TestBlockIndexer_RollForwardFunc(t *testing.T) {
 
 	confirmedBlock := (*FullBlock)(nil)
 	addressesOfInterest := []string{"addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd"}
-	getTxs := func() ([]ledger.Transaction, error) {
-		return []ledger.Transaction{
-			&LedgerTransactionMock{
-				OutputsVal: []ledger.TransactionOutput{
-					NewLedgerTransactionOutputMock(t, addressesOfInterest[0], uint64(100)),
+	getTxs := []GetTxsFunc{
+		func() ([]ledger.Transaction, error) {
+			return []ledger.Transaction{
+				&LedgerTransactionMock{
+					OutputsVal: []ledger.TransactionOutput{
+						NewLedgerTransactionOutputMock(t, addressesOfInterest[0], uint64(100)),
+					},
 				},
-			},
-		}, nil
+			}, nil
+		},
+		func() ([]ledger.Transaction, error) {
+			return []ledger.Transaction{
+				&LedgerTransactionMock{
+					OutputsVal: []ledger.TransactionOutput{
+						NewLedgerTransactionOutputMock(t, addressesOfInterest[0], uint64(100)),
+					},
+				},
+				&LedgerTransactionMock{
+					OutputsVal: []ledger.TransactionOutput{
+						NewLedgerTransactionOutputMock(t, addressesOfInterest[0], uint64(200)),
+					},
+				},
+			}, nil
+		},
+		func() ([]ledger.Transaction, error) {
+			return []ledger.Transaction{}, nil
+		},
+		func() ([]ledger.Transaction, error) {
+			return []ledger.Transaction{}, nil
+		},
 	}
+
 	blockHeaders := []*BlockHeader{
 		{BlockSlot: 1, BlockHash: []byte{1}, BlockNumber: 1},
 		{BlockSlot: 2, BlockHash: []byte{2}, BlockNumber: 2},
@@ -682,7 +705,7 @@ func TestBlockIndexer_RollForwardFunc(t *testing.T) {
 			}).Once()
 		}
 
-		err := blockIndexer.RollForwardFunc(h, getTxs, chainsync.Tip{})
+		err := blockIndexer.RollForwardFunc(h, getTxs[i], chainsync.Tip{})
 
 		require.NoError(t, err)
 
@@ -692,6 +715,7 @@ func TestBlockIndexer_RollForwardFunc(t *testing.T) {
 			require.Len(t, blockIndexer.unconfirmedBlocks, 2)
 			require.NotNil(t, confirmedBlock)
 			require.Equal(t, blockHeaders[i-2].BlockHash, confirmedBlock.BlockHash)
+			require.Len(t, confirmedBlock.Txs, i-1)
 		}
 
 		dbMock.AssertExpectations(t)
