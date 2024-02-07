@@ -2,7 +2,7 @@ package core
 
 type DbTransactionWriter interface {
 	SetLatestBlockPoint(point *BlockPoint) DbTransactionWriter
-	AddTxOutput(txInput TxInput, txOutput *TxOutput) DbTransactionWriter
+	AddTxOutputs(txOutputs []*TxInputOutput) DbTransactionWriter
 	AddConfirmedBlock(block *FullBlock) DbTransactionWriter
 	RemoveTxOutputs(txInputs []*TxInput) DbTransactionWriter
 	Execute() error

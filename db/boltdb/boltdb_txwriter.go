@@ -34,15 +34,23 @@ func (tw *BoltDbTransactionWriter) SetLatestBlockPoint(point *core.BlockPoint) c
 	return tw
 }
 
-func (tw *BoltDbTransactionWriter) AddTxOutput(txInput core.TxInput, txOutput *core.TxOutput) core.DbTransactionWriter {
-	tw.operations = append(tw.operations, func(tx *bolt.Tx) error {
-		bytes, err := json.Marshal(txOutput)
-		if err != nil {
-			return fmt.Errorf("could not marshal tx output: %v", err)
-		}
+func (tw *BoltDbTransactionWriter) AddTxOutputs(txOutputs []*core.TxInputOutput) core.DbTransactionWriter {
+	if len(txOutputs) == 0 {
+		return tw
+	}
 
-		if err = tx.Bucket(txOutputsBucket).Put(txInput.Key(), bytes); err != nil {
-			return fmt.Errorf("tx output write error: %v", err)
+	tw.operations = append(tw.operations, func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(txOutputsBucket)
+
+		for _, inpOut := range txOutputs {
+			bytes, err := json.Marshal(inpOut.Output)
+			if err != nil {
+				return fmt.Errorf("could not marshal tx output: %v", err)
+			}
+
+			if err = bucket.Put(inpOut.Input.Key(), bytes); err != nil {
+				return fmt.Errorf("tx output write error: %v", err)
+			}
 		}
 
 		return nil
@@ -69,8 +77,13 @@ func (tw *BoltDbTransactionWriter) AddConfirmedBlock(block *core.FullBlock) core
 }
 
 func (tw *BoltDbTransactionWriter) RemoveTxOutputs(txInputs []*core.TxInput) core.DbTransactionWriter {
+	if len(txInputs) == 0 {
+		return tw
+	}
+
 	tw.operations = append(tw.operations, func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(txOutputsBucket)
+
 		for _, inp := range txInputs {
 			if err := bucket.Delete(inp.Key()); err != nil {
 				return err

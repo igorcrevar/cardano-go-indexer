@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"strings"
+	"time"
 
 	ouroboros "github.com/blinklabs-io/gouroboros"
 	"github.com/blinklabs-io/gouroboros/ledger"
@@ -12,38 +13,68 @@ import (
 	"github.com/hashicorp/go-hclog"
 )
 
+var (
+	errBlockSyncerFatal = errors.New("block syncer fatal error")
+)
+
 const (
 	ProtocolTCP  = "tcp"
 	ProtocolUnix = "unix"
 )
 
+type GetTxsFunc func() ([]ledger.Transaction, error)
+
 type BlockSyncer interface {
-	Sync(networkMagic uint32, nodeAddress string, slot uint64, blockHash []byte, blockHandler BlockSyncerHandler) error
-	GetFullBlock(slot uint64, hash []byte) (ledger.Block, error)
+	Sync() error
 	Close() error
 }
 
 type BlockSyncerHandler interface {
 	RollBackwardFunc(point common.Point, tip chainsync.Tip) error
-	RollForwardFunc(blockType uint, blockInfo interface{}, tip chainsync.Tip) error
-	ErrorHandler(err error)
+	RollForwardFunc(blockHeader *BlockHeader, getTxsFunc GetTxsFunc, tip chainsync.Tip) error
+	SyncBlockPoint() (BlockPoint, error)
+	NextBlockNumber() uint64
+}
+
+type BlockSyncerConfig struct {
+	NetworkMagic   uint32        `json:"networkMagic"`
+	NodeAddress    string        `json:"nodeAddress"`
+	RestartOnError bool          `json:"restartOnError"`
+	RestartDelay   time.Duration `json:"restartDelay"`
+}
+
+func (bsc BlockSyncerConfig) Protocol() string {
+	if strings.HasPrefix(bsc.NodeAddress, "/") {
+		return ProtocolUnix
+	}
+
+	return ProtocolTCP
 }
 
 type BlockSyncerImpl struct {
-	connection *ouroboros.Connection
-	logger     hclog.Logger
+	connection   *ouroboros.Connection
+	blockHandler BlockSyncerHandler
+	config       *BlockSyncerConfig
+	logger       hclog.Logger
 }
 
 var _ BlockSyncer = (*BlockSyncerImpl)(nil)
 
-func NewBlockSyncer(logger hclog.Logger) *BlockSyncerImpl {
+func NewBlockSyncer(config *BlockSyncerConfig, blockHandler BlockSyncerHandler, logger hclog.Logger) *BlockSyncerImpl {
 	return &BlockSyncerImpl{
-		logger: logger,
+		blockHandler: blockHandler,
+		config:       config,
+		logger:       logger,
 	}
 }
 
-func (bs *BlockSyncerImpl) Sync(networkMagic uint32, nodeAddress string, slot uint64, blockHash []byte, blockHandler BlockSyncerHandler) error {
-	bs.logger.Debug("Start syncing requested", "networkMagic", networkMagic, "address", nodeAddress, "slot", slot, "hash", hex.EncodeToString(blockHash))
+func (bs *BlockSyncerImpl) Sync() error {
+	blockPoint, err := bs.blockHandler.SyncBlockPoint()
+	if err != nil {
+		return err
+	}
+
+	bs.logger.Debug("Start syncing requested", "networkMagic", bs.config.NetworkMagic, "address", bs.config.NodeAddress, "slot", blockPoint.BlockSlot, "hash", hex.EncodeToString(blockPoint.BlockHash))
 
 	if bs.connection != nil {
 		bs.connection.Close() // close previous connection
@@ -51,12 +82,12 @@ func (bs *BlockSyncerImpl) Sync(networkMagic uint32, nodeAddress string, slot ui
 
 	// create connection
 	connection, err := ouroboros.NewConnection(
-		ouroboros.WithNetworkMagic(networkMagic),
+		ouroboros.WithNetworkMagic(bs.config.NetworkMagic),
 		ouroboros.WithNodeToNode(true),
 		ouroboros.WithKeepAlive(true),
 		ouroboros.WithChainSyncConfig(chainsync.NewConfig(
-			chainsync.WithRollBackwardFunc(blockHandler.RollBackwardFunc),
-			chainsync.WithRollForwardFunc(blockHandler.RollForwardFunc),
+			chainsync.WithRollBackwardFunc(bs.blockHandler.RollBackwardFunc),
+			chainsync.WithRollForwardFunc(bs.rollForwardCallback),
 		)),
 	)
 	if err != nil {
@@ -65,40 +96,20 @@ func (bs *BlockSyncerImpl) Sync(networkMagic uint32, nodeAddress string, slot ui
 
 	bs.connection = connection
 
-	proto := ProtocolTCP
-	if strings.HasPrefix(nodeAddress, "/") {
-		proto = ProtocolUnix
-	}
-
 	// dial node -> connect to node
-	if err := bs.connection.Dial(proto, nodeAddress); err != nil {
+	if err := bs.connection.Dial(bs.config.Protocol(), bs.config.NodeAddress); err != nil {
 		return err
 	}
 
-	var point common.Point
-
-	if len(blockHash) == 0 {
-		point = common.NewPointOrigin() // from genesis
-	} else {
-		point = common.NewPoint(slot, blockHash)
-	}
-
-	bs.logger.Debug("Syncing started", "networkMagic", networkMagic, "address", nodeAddress, "slot", slot, "hash", hex.EncodeToString(blockHash))
+	bs.logger.Debug("Syncing started", "networkMagic", bs.config.NetworkMagic, "address", bs.config.NodeAddress, "slot", blockPoint.BlockSlot, "hash", hex.EncodeToString(blockPoint.BlockHash))
 
 	// start syncing
-	if err := bs.connection.ChainSync().Client.Sync([]common.Point{point}); err != nil {
+	if err := bs.connection.ChainSync().Client.Sync([]common.Point{blockPoint.ToCommonPoint()}); err != nil {
 		return err
 	}
 
 	// in separated routine wait for async errors
-	go func() {
-		err, ok := <-bs.connection.ErrorChan()
-		if !ok {
-			return
-		}
-
-		blockHandler.ErrorHandler(err)
-	}()
+	go bs.errorHandler()
 
 	return nil
 }
@@ -111,11 +122,59 @@ func (bs *BlockSyncerImpl) Close() error {
 	return bs.connection.Close()
 }
 
-func (bs *BlockSyncerImpl) GetFullBlock(slot uint64, hash []byte) (ledger.Block, error) {
+func (bs *BlockSyncerImpl) getBlock(slot uint64, hash []byte) (ledger.Block, error) {
 	bs.logger.Debug("Get full block", "slot", slot, "hash", hex.EncodeToString(hash), "connected", bs.connection != nil)
 	if bs.connection == nil {
 		return nil, errors.New("no connection")
 	}
 
 	return bs.connection.BlockFetch().Client.GetBlock(common.NewPoint(slot, hash))
+}
+
+func (bs *BlockSyncerImpl) getBlockTransactions(blockHeader *BlockHeader) ([]ledger.Transaction, error) {
+	block, err := bs.getBlock(blockHeader.BlockSlot, blockHeader.BlockHash)
+	if err != nil {
+		return nil, err
+	}
+
+	return block.Transactions(), nil
+}
+
+func (bs *BlockSyncerImpl) rollForwardCallback(blockType uint, blockInfo interface{}, tip chainsync.Tip) error {
+	blockHeader, err := GetBlockHeaderFromBlockInfo(blockType, blockInfo, bs.blockHandler.NextBlockNumber())
+	if err != nil {
+		return errors.Join(errBlockSyncerFatal, err)
+	}
+
+	bs.logger.Debug("Roll forward", "number", blockHeader.BlockNumber,
+		"hash", hex.EncodeToString(blockHeader.BlockHash), "slot", tip.Point.Slot, "hash", hex.EncodeToString(tip.Point.Hash))
+
+	getTxsFunc := func() ([]ledger.Transaction, error) {
+		return bs.getBlockTransactions(blockHeader)
+	}
+
+	return bs.blockHandler.RollForwardFunc(blockHeader, getTxsFunc, tip)
+}
+
+func (bs *BlockSyncerImpl) errorHandler() {
+	if bs.connection == nil {
+		return
+	}
+
+	err, ok := <-bs.connection.ErrorChan()
+	if !ok {
+		return
+	}
+
+	// retry syncing again if not fatal error and if RestartOnError is true (errors.Is does not work in this case)
+	if !strings.Contains(err.Error(), errBlockSyncerFatal.Error()) && bs.config.RestartOnError {
+		bs.logger.Warn("Error happened during synchronization", "err", err)
+
+		time.Sleep(bs.config.RestartDelay)
+		if err := bs.Sync(); err != nil {
+			bs.logger.Warn("Error happened while trying to restart the synchronization", "err", err)
+		}
+	} else {
+		bs.logger.Error("Error happened during synchronization. Restart the syncer manually.", "err", err)
+	}
 }

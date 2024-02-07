@@ -11,11 +11,11 @@ import (
 )
 
 type LoggerConfig struct {
-	LogLevel        hclog.Level
-	JSONLogFormat   bool
-	AppendOrNewFile bool
-	LogFilePath     string
-	Name            string
+	LogLevel      hclog.Level
+	JSONLogFormat bool
+	AppendFile    bool
+	LogFilePath   string
+	Name          string
 }
 
 func NewLogger(config LoggerConfig) (l hclog.Logger, err error) {
@@ -30,7 +30,7 @@ func NewLogger(config LoggerConfig) (l hclog.Logger, err error) {
 			}
 		}
 
-		if !config.AppendOrNewFile {
+		if !config.AppendFile {
 			timestamp := strings.Replace(strings.Replace(time.Now().UTC().Format(time.RFC3339), ":", "_", -1), "-", "_", -1)
 			fullFilePath = fullFilePath + "_" + timestamp
 		}
