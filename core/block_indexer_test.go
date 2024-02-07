@@ -496,11 +496,19 @@ func TestBlockIndexer_processConfirmedBlockKeepAllTxOutputsInDb(t *testing.T) {
 func TestBlockIndexer_RollBackwardFuncToUnconfirmed(t *testing.T) {
 	t.Parallel()
 
-	uncomfBlocks := []*BlockHeader{
-		{BlockNumber: 2, BlockSlot: 6, BlockHash: []byte{0, 2}},
-		{BlockNumber: 2, BlockSlot: 7, BlockHash: []byte{0, 3}},
-		{BlockNumber: 2, BlockSlot: 8, BlockHash: []byte{0, 4}},
-		{BlockNumber: 2, BlockSlot: 9, BlockHash: []byte{0, 5}},
+	uncomfBlocks := []blockWithLazyTxRetriever{
+		{
+			header: &BlockHeader{BlockNumber: 2, BlockSlot: 6, BlockHash: []byte{0, 2}},
+		},
+		{
+			header: &BlockHeader{BlockNumber: 2, BlockSlot: 7, BlockHash: []byte{0, 3}},
+		},
+		{
+			header: &BlockHeader{BlockNumber: 2, BlockSlot: 8, BlockHash: []byte{0, 4}},
+		},
+		{
+			header: &BlockHeader{BlockNumber: 2, BlockSlot: 9, BlockHash: []byte{0, 5}},
+		},
 	}
 	bp := &BlockPoint{
 		BlockSlot:   5,
@@ -539,9 +547,13 @@ func TestBlockIndexer_RollBackwardFuncToUnconfirmed(t *testing.T) {
 func TestBlockIndexer_RollBackwardFuncToConfirmed(t *testing.T) {
 	t.Parallel()
 
-	uncomfBlocks := []*BlockHeader{
-		{BlockNumber: 2, BlockSlot: 6, BlockHash: []byte{0, 2}},
-		{BlockNumber: 2, BlockSlot: 7, BlockHash: []byte{0, 3}},
+	uncomfBlocks := []blockWithLazyTxRetriever{
+		{
+			header: &BlockHeader{BlockNumber: 2, BlockSlot: 6, BlockHash: []byte{0, 2}},
+		},
+		{
+			header: &BlockHeader{BlockNumber: 2, BlockSlot: 7, BlockHash: []byte{0, 3}},
+		},
 	}
 	bp := &BlockPoint{
 		BlockSlot:   5,
@@ -580,9 +592,13 @@ func TestBlockIndexer_RollBackwardFuncToConfirmed(t *testing.T) {
 func TestBlockIndexer_RollBackwardFuncError(t *testing.T) {
 	t.Parallel()
 
-	uncomfBlocks := []*BlockHeader{
-		{BlockNumber: 2, BlockSlot: 6, BlockHash: []byte{0, 2}},
-		{BlockNumber: 2, BlockSlot: 7, BlockHash: []byte{0, 3}},
+	uncomfBlocks := []blockWithLazyTxRetriever{
+		{
+			header: &BlockHeader{BlockNumber: 2, BlockSlot: 6, BlockHash: []byte{0, 2}},
+		},
+		{
+			header: &BlockHeader{BlockNumber: 2, BlockSlot: 7, BlockHash: []byte{0, 3}},
+		},
 	}
 	bp := &BlockPoint{
 		BlockSlot:   5,
@@ -702,11 +718,15 @@ func TestBlockIndexer_NextBlockNumber(t *testing.T) {
 	v := blockIndexer.NextBlockNumber()
 	require.Equal(t, blockIndexer.latestBlockPoint.BlockNumber+1, v)
 
-	blockIndexer.unconfirmedBlocks = []*BlockHeader{
-		{BlockNumber: 2, BlockSlot: 6, BlockHash: []byte{0, 2}},
-		{BlockNumber: 2, BlockSlot: 7, BlockHash: []byte{0, 3}},
+	blockIndexer.unconfirmedBlocks = []blockWithLazyTxRetriever{
+		{
+			header: &BlockHeader{BlockNumber: 2, BlockSlot: 6, BlockHash: []byte{0, 2}},
+		},
+		{
+			header: &BlockHeader{BlockNumber: 2, BlockSlot: 7, BlockHash: []byte{0, 3}},
+		},
 	}
 
 	v = blockIndexer.NextBlockNumber()
-	require.Equal(t, blockIndexer.unconfirmedBlocks[len(blockIndexer.unconfirmedBlocks)-1].BlockNumber+1, v)
+	require.Equal(t, blockIndexer.unconfirmedBlocks[len(blockIndexer.unconfirmedBlocks)-1].header.BlockNumber+1, v)
 }
