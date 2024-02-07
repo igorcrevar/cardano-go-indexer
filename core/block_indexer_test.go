@@ -12,13 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-/*
-Addresses
-addr1vxrmu3m2cc5k6xltupj86a2uzcuq8r4nhznrhfq0pkwl4hgqj2v8w
-addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd
-addr1v8hrxaz0yqkfdsszfvjmdnqh0tv4xl2xgd7dfrxzj86cqzghu5c6p
-addr1qxh7y2ezyt7hcraew7q0s8fg36usm049ktf4m9rly220snm0tf3rte5f4wequeg86kww58hp34qpwxdpl76tfuwmk77qjstmmj
-*/
+var addresses = []string{
+	"addr1vxrmu3m2cc5k6xltupj86a2uzcuq8r4nhznrhfq0pkwl4hgqj2v8w",
+	"addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd",
+	"addr1v8hrxaz0yqkfdsszfvjmdnqh0tv4xl2xgd7dfrxzj86cqzghu5c6p",
+	"addr1qxh7y2ezyt7hcraew7q0s8fg36usm049ktf4m9rly220snm0tf3rte5f4wequeg86kww58hp34qpwxdpl76tfuwmk77qjstmmj",
+}
 
 func TestBlockIndexer_processConfirmedBlockNoTxOfInterest(t *testing.T) {
 	t.Parallel()
@@ -28,7 +27,7 @@ func TestBlockIndexer_processConfirmedBlockNoTxOfInterest(t *testing.T) {
 		blockSlot   = uint64(100)
 	)
 
-	addressesOfInterest := []string{"addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd"}
+	addressesOfInterest := []string{addresses[1]}
 	blockHash := []byte{100, 200, 100}
 	expectedLastBlockPoint := &BlockPoint{
 		BlockSlot:   blockSlot,
@@ -52,7 +51,7 @@ func TestBlockIndexer_processConfirmedBlockNoTxOfInterest(t *testing.T) {
 				NewLedgerTransactionInputMock(t, []byte{1, 2}, uint32(0)),
 			},
 			OutputsVal: []ledger.TransactionOutput{
-				NewLedgerTransactionOutputMock(t, "addr1v8hrxaz0yqkfdsszfvjmdnqh0tv4xl2xgd7dfrxzj86cqzghu5c6p", uint64(100)),
+				NewLedgerTransactionOutputMock(t, addresses[2], uint64(100)),
 			},
 		},
 		&LedgerTransactionMock{
@@ -61,7 +60,7 @@ func TestBlockIndexer_processConfirmedBlockNoTxOfInterest(t *testing.T) {
 				NewLedgerTransactionInputMock(t, []byte{1, 2, 3}, uint32(1)),
 			},
 			OutputsVal: []ledger.TransactionOutput{
-				NewLedgerTransactionOutputMock(t, "addr1vxrmu3m2cc5k6xltupj86a2uzcuq8r4nhznrhfq0pkwl4hgqj2v8w", uint64(100)),
+				NewLedgerTransactionOutputMock(t, addresses[0], uint64(100)),
 			},
 		},
 	}
@@ -98,7 +97,7 @@ func TestBlockIndexer_processConfirmedBlockTxOfInterestInOutputs(t *testing.T) {
 	)
 
 	hashTx := []string{"00333", "7873282"}
-	addressesOfInterest := []string{"addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd", "addr1qxh7y2ezyt7hcraew7q0s8fg36usm049ktf4m9rly220snm0tf3rte5f4wequeg86kww58hp34qpwxdpl76tfuwmk77qjstmmj"}
+	addressesOfInterest := []string{addresses[1], addresses[3]}
 	blockHash := []byte{100, 200, 100}
 	txInputs := [3]ledger.TransactionInput{
 		NewLedgerTransactionInputMock(t, []byte{1}, uint32(0)),
@@ -108,8 +107,8 @@ func TestBlockIndexer_processConfirmedBlockTxOfInterestInOutputs(t *testing.T) {
 	txOutputs := [4]ledger.TransactionOutput{
 		NewLedgerTransactionOutputMock(t, addressesOfInterest[0], uint64(100)),
 		NewLedgerTransactionOutputMock(t, addressesOfInterest[1], uint64(200)),
-		NewLedgerTransactionOutputMock(t, "addr1vxrmu3m2cc5k6xltupj86a2uzcuq8r4nhznrhfq0pkwl4hgqj2v8w", uint64(100)), // not address of interest
-		NewLedgerTransactionOutputMock(t, "addr1vxrmu3m2cc5k6xltupj86a2uzcuq8r4nhznrhfq0pkwl4hgqj2v8w", uint64(100)), // not address of interest
+		NewLedgerTransactionOutputMock(t, addresses[0], uint64(100)), // not address of interest
+		NewLedgerTransactionOutputMock(t, addresses[0], uint64(100)), // not address of interest
 	}
 	expectedLastBlockPoint := &BlockPoint{
 		BlockSlot:   blockSlot,
@@ -232,7 +231,7 @@ func TestBlockIndexer_processConfirmedBlockTxOfInterestInInputs(t *testing.T) {
 	)
 
 	hashTx := [2]string{"eee", "111"}
-	addressesOfInterest := []string{"addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd", "addr1qxh7y2ezyt7hcraew7q0s8fg36usm049ktf4m9rly220snm0tf3rte5f4wequeg86kww58hp34qpwxdpl76tfuwmk77qjstmmj"}
+	addressesOfInterest := []string{addresses[1], addresses[3]}
 	dbInputOutputs := [2]*TxInputOutput{
 		{
 			Input: &TxInput{
@@ -285,7 +284,7 @@ func TestBlockIndexer_processConfirmedBlockTxOfInterestInInputs(t *testing.T) {
 				txInputs[0], txInputs[1],
 			},
 			OutputsVal: []ledger.TransactionOutput{
-				NewLedgerTransactionOutputMock(t, "addr1vxrmu3m2cc5k6xltupj86a2uzcuq8r4nhznrhfq0pkwl4hgqj2v8w", uint64(200)),
+				NewLedgerTransactionOutputMock(t, addresses[0], uint64(200)),
 			},
 		},
 		&LedgerTransactionMock{
@@ -293,7 +292,7 @@ func TestBlockIndexer_processConfirmedBlockTxOfInterestInInputs(t *testing.T) {
 				txInputs[2],
 			},
 			OutputsVal: []ledger.TransactionOutput{
-				NewLedgerTransactionOutputMock(t, "addr1vxrmu3m2cc5k6xltupj86a2uzcuq8r4nhznrhfq0pkwl4hgqj2v8w", uint64(100)),
+				NewLedgerTransactionOutputMock(t, addresses[0], uint64(100)),
 			},
 		},
 		&LedgerTransactionMock{
@@ -302,7 +301,7 @@ func TestBlockIndexer_processConfirmedBlockTxOfInterestInInputs(t *testing.T) {
 				txInputs[3],
 			},
 			OutputsVal: []ledger.TransactionOutput{
-				NewLedgerTransactionOutputMock(t, "addr1vxrmu3m2cc5k6xltupj86a2uzcuq8r4nhznrhfq0pkwl4hgqj2v8w", uint64(200)),
+				NewLedgerTransactionOutputMock(t, addresses[0], uint64(200)),
 			},
 		},
 	}
@@ -387,7 +386,7 @@ func TestBlockIndexer_processConfirmedBlockKeepAllTxOutputsInDb(t *testing.T) {
 				Index: uint32(20),
 			},
 			Output: &TxOutput{
-				Address: "addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd",
+				Address: addresses[1],
 				Amount:  2000,
 			},
 		},
@@ -397,7 +396,7 @@ func TestBlockIndexer_processConfirmedBlockKeepAllTxOutputsInDb(t *testing.T) {
 				Index: uint32(120),
 			},
 			Output: &TxOutput{
-				Address: "addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd",
+				Address: addresses[1],
 				Amount:  2,
 			},
 		},
@@ -430,7 +429,7 @@ func TestBlockIndexer_processConfirmedBlockKeepAllTxOutputsInDb(t *testing.T) {
 				txInputs[0],
 			},
 			OutputsVal: []ledger.TransactionOutput{
-				NewLedgerTransactionOutputMock(t, "addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd", uint64(200)),
+				NewLedgerTransactionOutputMock(t, addresses[1], uint64(200)),
 			},
 		},
 		&LedgerTransactionMock{
@@ -439,7 +438,7 @@ func TestBlockIndexer_processConfirmedBlockKeepAllTxOutputsInDb(t *testing.T) {
 				txInputs[1],
 			},
 			OutputsVal: []ledger.TransactionOutput{
-				NewLedgerTransactionOutputMock(t, "addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd", uint64(100)),
+				NewLedgerTransactionOutputMock(t, addresses[1], uint64(100)),
 			},
 		},
 	}
@@ -450,11 +449,11 @@ func TestBlockIndexer_processConfirmedBlockKeepAllTxOutputsInDb(t *testing.T) {
 	dbMock.Writter.On("AddTxOutputs", []*TxInputOutput{
 		{
 			Input:  &TxInput{Hash: hashTx[0], Index: 0},
-			Output: &TxOutput{Address: "addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd", Amount: uint64(200)},
+			Output: &TxOutput{Address: addresses[1], Amount: uint64(200)},
 		},
 		{
 			Input:  &TxInput{Hash: hashTx[1], Index: 0},
-			Output: &TxOutput{Address: "addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd", Amount: uint64(100)},
+			Output: &TxOutput{Address: addresses[1], Amount: uint64(100)},
 		},
 	}).Once()
 	dbMock.Writter.On("RemoveTxOutputs", []*TxInput{
@@ -637,7 +636,7 @@ func TestBlockIndexer_RollForwardFunc(t *testing.T) {
 	t.Parallel()
 
 	confirmedBlock := (*FullBlock)(nil)
-	addressesOfInterest := []string{"addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd"}
+	addressesOfInterest := []string{addresses[1]}
 	getTxs := []GetTxsFunc{
 		func() ([]ledger.Transaction, error) {
 			return []ledger.Transaction{

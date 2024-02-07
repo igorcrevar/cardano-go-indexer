@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	AddressCheckNone    = 0         // No flags
-	AddressCheckInputs  = 1 << iota // 1 << 0 = 1
-	AddressCheckOutputs             // 1 << 1 = 2
+	AddressCheckNone    = 0               // No flags
+	AddressCheckInputs  = 1 << (iota - 1) // 1 << 0 = 0x00...0001 = 1
+	AddressCheckOutputs                   // 1 << 1 = 0x00...0010 = 2
 	AddressCheckAll     = AddressCheckInputs | AddressCheckOutputs
 )
 
@@ -190,7 +190,7 @@ func (bi *BlockIndexer) processConfirmedBlock(confirmedBlockHeader *BlockHeader,
 		dbTx = bi.db.OpenTx() // open database tx
 	)
 
-	// get all transactions of interesy from block
+	// get all transactions of interest from block
 	txsOfInterest, err := bi.getTxsOfInterest(allBlockTransactions)
 	if err != nil {
 		return nil, nil, err
