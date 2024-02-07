@@ -2,7 +2,9 @@ package core
 
 import (
 	"encoding/hex"
+	"errors"
 	"testing"
+	"time"
 
 	ouroboros "github.com/blinklabs-io/gouroboros"
 	"github.com/blinklabs-io/gouroboros/protocol/chainsync"
@@ -11,15 +13,59 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type BlockSyncerHandlerMock struct{}
+type BlockSyncerHandlerMock struct {
+	BlockPoint         *BlockPoint
+	RollForwardFn      func(blockHeader *BlockHeader, getTxsFunc GetTxsFunc, tip chainsync.Tip) error
+	RollBackwardFuncFn func(point common.Point, tip chainsync.Tip) error
+}
 
-func (hMock *BlockSyncerHandlerMock) RollForwardFunc(blockType uint, blockInfo interface{}, tip chainsync.Tip) error {
-	return nil
+func NewBlockSyncerHandlerMock(slot uint64, hash string) *BlockSyncerHandlerMock {
+	bn := uint64(0)
+	hashBytes, _ := hex.DecodeString(hash)
+
+	if hash == ExistingPointHashStr {
+		bn = ExistingPointBlockNum
+	}
+
+	return &BlockSyncerHandlerMock{
+		BlockPoint: &BlockPoint{
+			BlockSlot:   slot,
+			BlockHash:   hashBytes,
+			BlockNumber: bn,
+		},
+	}
 }
+
 func (hMock *BlockSyncerHandlerMock) RollBackwardFunc(point common.Point, tip chainsync.Tip) error {
+	if hMock.RollBackwardFuncFn != nil {
+		return hMock.RollBackwardFuncFn(point, tip)
+	}
+
 	return nil
 }
-func (hMock *BlockSyncerHandlerMock) ErrorHandler(err error) {
+
+func (hMock *BlockSyncerHandlerMock) RollForwardFunc(blockHeader *BlockHeader, getTxsFunc GetTxsFunc, tip chainsync.Tip) error {
+	if hMock.RollForwardFn != nil {
+		return hMock.RollForwardFn(blockHeader, getTxsFunc, tip)
+	}
+
+	return nil
+}
+
+func (hMock *BlockSyncerHandlerMock) SyncBlockPoint() (BlockPoint, error) {
+	if hMock.BlockPoint == nil {
+		return BlockPoint{}, errors.New("error sync block point")
+	}
+
+	return *hMock.BlockPoint, nil
+}
+
+func (hMock *BlockSyncerHandlerMock) NextBlockNumber() uint64 {
+	if hMock.BlockPoint == nil {
+		return 1
+	}
+
+	return hMock.BlockPoint.BlockNumber + 1
 }
 
 const (
@@ -29,165 +75,209 @@ const (
 	ExistingPointHashStr    = "34c36a9eb7228ca529e91babcf2215be29ce2a65b609540b483abc4520848d19"
 	NonExistingPointSlot    = uint64(2607240)
 	NonExistingPointHashStr = "34c36a9eb7228ca529e91babcf2215be29ce2a65b609540b483abc4520848d20"
+	ExistingPointBlockNum   = 125819
 )
 
-func TestNewBlockSyncerWithUninitializedLogger(t *testing.T) {
+func TestNewBlockSyncer(t *testing.T) {
+	t.Parallel()
+
 	var logger hclog.Logger
 
-	syncer := NewBlockSyncer(logger)
-	require.NotNil(t, syncer)
-}
-
-func TestNewBlockSyncerWithInitializedLogger(t *testing.T) {
-	logger := hclog.Default()
-
-	syncer := NewBlockSyncer(logger)
+	syncer := NewBlockSyncer(&BlockSyncerConfig{}, &BlockSyncerHandlerMock{}, logger)
 	require.NotNil(t, syncer)
 }
 
 func TestSyncWrongMagic(t *testing.T) {
-	syncer := NewBlockSyncer(hclog.Default())
-	existingPointHash, _ := hex.DecodeString(ExistingPointHashStr)
+	t.Parallel()
 
-	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
+	mockSyncerBlockHandler := NewBlockSyncerHandlerMock(ExistingPointSlot, ExistingPointHashStr)
+	syncer := NewBlockSyncer(&BlockSyncerConfig{
+		NetworkMagic: 71,
+		NodeAddress:  NodeAddress,
+	}, mockSyncerBlockHandler, hclog.NewNullLogger())
+
 	defer syncer.Close()
-	err := syncer.Sync(71, NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler)
+
+	err := syncer.Sync()
 	require.NotNil(t, err)
 }
 
 func TestSyncWrongNodeAddress(t *testing.T) {
-	syncer := NewBlockSyncer(hclog.Default())
-	existingPointHash, _ := hex.DecodeString(ExistingPointHashStr)
+	t.Parallel()
 
-	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
+	mockSyncerBlockHandler := NewBlockSyncerHandlerMock(ExistingPointSlot, ExistingPointHashStr)
+	syncer := NewBlockSyncer(&BlockSyncerConfig{
+		NetworkMagic: NetworkMagic,
+		NodeAddress:  "test",
+	}, mockSyncerBlockHandler, hclog.NewNullLogger())
+
 	defer syncer.Close()
-	err := syncer.Sync(NetworkMagic, "test", ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler)
+
+	err := syncer.Sync()
 	require.NotNil(t, err)
 }
 
 func TestSyncWrongUnixNodeAddress(t *testing.T) {
-	syncer := NewBlockSyncer(hclog.Default())
-	existingPointHash, _ := hex.DecodeString(ExistingPointHashStr)
+	t.Parallel()
 
-	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
+	mockSyncerBlockHandler := NewBlockSyncerHandlerMock(ExistingPointSlot, ExistingPointHashStr)
+	syncer := NewBlockSyncer(&BlockSyncerConfig{
+		NetworkMagic: NetworkMagic,
+		NodeAddress:  "/" + NodeAddress,
+	}, mockSyncerBlockHandler, hclog.NewNullLogger())
+
 	defer syncer.Close()
-	err := syncer.Sync(NetworkMagic, "/"+NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler)
+
+	err := syncer.Sync()
 	require.NotNil(t, err)
 }
 
 func TestSyncNonExistingSlot(t *testing.T) {
-	syncer := NewBlockSyncer(hclog.Default())
-	existingPointHash, _ := hex.DecodeString(ExistingPointHashStr)
+	t.Parallel()
 
-	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
+	mockSyncerBlockHandler := NewBlockSyncerHandlerMock(NonExistingPointSlot, ExistingPointHashStr)
+	syncer := NewBlockSyncer(&BlockSyncerConfig{
+		NetworkMagic: NetworkMagic,
+		NodeAddress:  "/" + NodeAddress,
+	}, mockSyncerBlockHandler, hclog.NewNullLogger())
+
 	defer syncer.Close()
-	err := syncer.Sync(NetworkMagic, NodeAddress, NonExistingPointSlot, existingPointHash, &mockSyncerBlockHandler)
+
+	err := syncer.Sync()
 	require.NotNil(t, err)
 }
 
 func TestSyncNonExistingHash(t *testing.T) {
-	syncer := NewBlockSyncer(hclog.Default())
-	nonExistingPointHash, _ := hex.DecodeString(NonExistingPointHashStr)
+	t.Parallel()
 
-	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
+	mockSyncerBlockHandler := NewBlockSyncerHandlerMock(ExistingPointSlot, NonExistingPointHashStr)
+	syncer := NewBlockSyncer(&BlockSyncerConfig{
+		NetworkMagic: NetworkMagic,
+		NodeAddress:  "/" + NodeAddress,
+	}, mockSyncerBlockHandler, hclog.NewNullLogger())
+
 	defer syncer.Close()
-	err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, nonExistingPointHash, &mockSyncerBlockHandler)
+
+	err := syncer.Sync()
 	require.NotNil(t, err)
 }
 
 func TestSyncEmptyHash(t *testing.T) {
-	syncer := NewBlockSyncer(hclog.Default())
+	t.Parallel()
+
 	var emptyHash []byte
 
-	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
+	mockSyncerBlockHandler := NewBlockSyncerHandlerMock(ExistingPointSlot, string(emptyHash))
+	syncer := NewBlockSyncer(&BlockSyncerConfig{
+		NetworkMagic: NetworkMagic,
+		NodeAddress:  NodeAddress,
+	}, mockSyncerBlockHandler, hclog.NewNullLogger())
+
 	defer syncer.Close()
-	err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, emptyHash, &mockSyncerBlockHandler)
+
+	err := syncer.Sync()
 	require.Nil(t, err)
 }
 
 func TestSync(t *testing.T) {
-	syncer := NewBlockSyncer(hclog.Default())
-	existingPointHash, _ := hex.DecodeString(ExistingPointHashStr)
+	t.Parallel()
 
-	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
+	mockSyncerBlockHandler := NewBlockSyncerHandlerMock(ExistingPointSlot, ExistingPointHashStr)
+	syncer := NewBlockSyncer(&BlockSyncerConfig{
+		NetworkMagic: NetworkMagic,
+		NodeAddress:  NodeAddress,
+	}, mockSyncerBlockHandler, hclog.NewNullLogger())
+
 	defer syncer.Close()
-	err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler)
+
+	err := syncer.Sync()
 	require.Nil(t, err)
 }
 
 func TestSyncWithExistingConnection(t *testing.T) {
-	syncer := NewBlockSyncer(hclog.Default())
-	connection, _ := ouroboros.NewConnection(
+	t.Parallel()
+
+	mockSyncerBlockHandler := NewBlockSyncerHandlerMock(ExistingPointSlot, ExistingPointHashStr)
+	syncer := NewBlockSyncer(&BlockSyncerConfig{
+		NetworkMagic: NetworkMagic,
+		NodeAddress:  NodeAddress,
+	}, mockSyncerBlockHandler, hclog.NewNullLogger())
+
+	defer syncer.Close()
+
+	connection, err := ouroboros.NewConnection(
 		ouroboros.WithNetworkMagic(NetworkMagic),
 		ouroboros.WithNodeToNode(true),
 		ouroboros.WithKeepAlive(true),
 	)
-	syncer.connection = connection
-	existingPointHash, _ := hex.DecodeString(ExistingPointHashStr)
+	require.NoError(t, err)
 
-	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
-	defer syncer.Close()
-	err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler)
+	syncer.connection = connection
+	err = syncer.Sync()
 	require.Nil(t, err)
 }
 
 func TestCloseWithConnectionNil(t *testing.T) {
-	syncer := NewBlockSyncer(nil)
+	t.Parallel()
+
+	mockSyncerBlockHandler := NewBlockSyncerHandlerMock(ExistingPointSlot, ExistingPointHashStr)
+	syncer := NewBlockSyncer(&BlockSyncerConfig{
+		NetworkMagic: NetworkMagic,
+		NodeAddress:  NodeAddress,
+	}, mockSyncerBlockHandler, hclog.NewNullLogger())
 
 	err := syncer.Close()
 	require.Nil(t, err)
 }
 
 func TestCloseWithConnectionNotNil(t *testing.T) {
-	syncer := NewBlockSyncer(nil)
-	connection, _ := ouroboros.NewConnection(
+	t.Parallel()
+
+	mockSyncerBlockHandler := NewBlockSyncerHandlerMock(ExistingPointSlot, ExistingPointHashStr)
+	syncer := NewBlockSyncer(&BlockSyncerConfig{
+		NetworkMagic: NetworkMagic,
+		NodeAddress:  NodeAddress,
+	}, mockSyncerBlockHandler, hclog.NewNullLogger())
+
+	connection, err := ouroboros.NewConnection(
 		ouroboros.WithNetworkMagic(NetworkMagic),
 		ouroboros.WithNodeToNode(true),
 		ouroboros.WithKeepAlive(true),
 	)
+	require.NoError(t, err)
+
 	syncer.connection = connection
 
-	err := syncer.Close()
+	err = syncer.Close()
 	require.Nil(t, err)
 }
 
-func TestGetFullBlockWithConnectionNil(t *testing.T) {
-	syncer := NewBlockSyncer(hclog.Default())
+func TestSyncRollForwardCalled(t *testing.T) {
+	t.Parallel()
 
-	var slot uint64
-	var hash []byte
+	called := false
+	mockSyncerBlockHandler := NewBlockSyncerHandlerMock(ExistingPointSlot, ExistingPointHashStr)
+	syncer := NewBlockSyncer(&BlockSyncerConfig{
+		NetworkMagic: NetworkMagic,
+		NodeAddress:  NodeAddress,
+	}, mockSyncerBlockHandler, hclog.NewNullLogger())
 
-	_, err := syncer.GetFullBlock(slot, hash)
-	require.NotNil(t, err)
-}
-
-func TestGetFullBlockWithConnectionNotNilExisting(t *testing.T) {
-	syncer := NewBlockSyncer(hclog.Default())
-	existingPointHash, _ := hex.DecodeString(ExistingPointHashStr)
-
-	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
 	defer syncer.Close()
-	// .GetFullBlock panics without full initialize from .Sync
-	err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler)
-	require.Nil(t, err, "failed to start sync")
 
-	block, err := syncer.GetFullBlock(ExistingPointSlot, existingPointHash)
-	require.NotNil(t, block)
+	mockSyncerBlockHandler.RollForwardFn = func(blockHeader *BlockHeader, getTxsFunc GetTxsFunc, tip chainsync.Tip) error {
+		t.Helper()
+
+		_, err := getTxsFunc()
+		require.NoError(t, err)
+
+		called = true
+
+		return nil
+	}
+
+	err := syncer.Sync()
 	require.Nil(t, err)
-}
 
-func TestGetFullBlockWithConnectionNotNilNotExisting(t *testing.T) {
-	syncer := NewBlockSyncer(hclog.Default())
-	existingPointHash, _ := hex.DecodeString(ExistingPointHashStr)
-	nonExistingPointHash, _ := hex.DecodeString(NonExistingPointHashStr)
-
-	mockSyncerBlockHandler := BlockSyncerHandlerMock{}
-	defer syncer.Close()
-	// .GetFullBlock panics without full initialize from .Sync
-	err := syncer.Sync(NetworkMagic, NodeAddress, ExistingPointSlot, existingPointHash, &mockSyncerBlockHandler)
-	require.Nil(t, err, "failed to start sync")
-
-	block, err := syncer.GetFullBlock(NonExistingPointSlot, nonExistingPointHash)
-	require.Nil(t, block)
-	require.NotNil(t, err)
+	time.Sleep(5 * time.Second)
+	require.True(t, called)
 }

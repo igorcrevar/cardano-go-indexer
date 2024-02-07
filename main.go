@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"igorcrevar/cardano-go-syncer/core"
 	"igorcrevar/cardano-go-syncer/db/boltdb"
@@ -62,10 +63,7 @@ func main() {
 		return nil
 	}
 
-	syncer := core.NewBlockSyncer(logger.Named("block_syncer"))
-	indexer := core.NewBlockIndexer(&core.BlockIndexerConfig{
-		NetworkMagic: networkMagic,
-		NodeAddress:  address,
+	indexerConfig := &core.BlockIndexerConfig{
 		StartingBlockPoint: &core.BlockPoint{
 			BlockSlot:   startSlot,
 			BlockHash:   startBlockHash,
@@ -74,11 +72,20 @@ func main() {
 		AddressCheck:           core.AddressCheckAll,
 		ConfirmationBlockCount: 10,
 		AddressesOfInterest:    addressesOfInterest,
-	}, confirmedBlockHandler, syncer, db, logger.Named("block_indexer"))
+	}
+	syncerConfig := &core.BlockSyncerConfig{
+		NetworkMagic:   networkMagic,
+		NodeAddress:    address,
+		RestartOnError: true,
+		RestartDelay:   time.Second * 5,
+	}
 
-	defer indexer.Close()
+	indexer := core.NewBlockIndexer(indexerConfig, confirmedBlockHandler, db, logger.Named("block_indexer"))
 
-	err = indexer.StartSyncing()
+	syncer := core.NewBlockSyncer(syncerConfig, indexer, logger.Named("block_syncer"))
+	defer syncer.Close()
+
+	err = syncer.Sync()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		logger.Error("error: ", err)

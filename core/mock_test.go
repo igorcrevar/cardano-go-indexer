@@ -11,9 +11,8 @@ import (
 
 type BlockSyncerMock struct {
 	mock.Mock
-	CloseFn        func() error
-	GetFullBlockFn func(slot uint64, hash []byte) (ledger.Block, error)
-	SyncFn         func(networkMagic uint32, nodeAddress string, slot uint64, blockHash []byte, blockHandler BlockSyncerHandler) error
+	CloseFn func() error
+	SyncFn  func() error
 }
 
 // Close implements BlockSyncer.
@@ -27,23 +26,12 @@ func (m *BlockSyncerMock) Close() error {
 	return args.Error(0)
 }
 
-// GetFullBlock implements BlockSyncer.
-func (m *BlockSyncerMock) GetFullBlock(slot uint64, hash []byte) (ledger.Block, error) {
-	args := m.Called(slot, hash)
-
-	if m.GetFullBlockFn != nil {
-		return m.GetFullBlockFn(slot, hash)
-	}
-
-	return args.Get(0).(ledger.Block), args.Error(1)
-}
-
 // Sync implements BlockSyncer.
-func (m *BlockSyncerMock) Sync(networkMagic uint32, nodeAddress string, slot uint64, blockHash []byte, blockHandler BlockSyncerHandler) error {
-	args := m.Called(networkMagic, nodeAddress, slot, blockHash, blockHandler)
+func (m *BlockSyncerMock) Sync() error {
+	args := m.Called()
 
 	if m.SyncFn != nil {
-		return m.SyncFn(networkMagic, nodeAddress, slot, blockHash, blockHandler)
+		return m.SyncFn()
 	}
 
 	return args.Error(0)

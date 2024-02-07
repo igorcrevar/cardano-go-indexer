@@ -25,9 +25,6 @@ const (
 )
 
 type BlockIndexerConfig struct {
-	NetworkMagic uint32 `json:"networkMagic"`
-	NodeAddress  string `json:"nodeAddress"`
-
 	StartingBlockPoint *BlockPoint `json:"startingBlockPoint"`
 
 	// how many children blocks is needed for some block to be considered final
@@ -43,8 +40,7 @@ type BlockIndexerConfig struct {
 type NewConfirmedBlockHandler func(*FullBlock) error
 
 type BlockIndexer struct {
-	blockSyncer BlockSyncer
-	config      *BlockIndexerConfig
+	config *BlockIndexerConfig
 
 	// latest confirmed and saved block point
 	latestBlockPoint *BlockPoint
@@ -60,8 +56,7 @@ type BlockIndexer struct {
 
 var _ BlockSyncerHandler = (*BlockIndexer)(nil)
 
-func NewBlockIndexer(config *BlockIndexerConfig, newConfirmedBlockHandler NewConfirmedBlockHandler,
-	blockSyncer BlockSyncer, db BlockIndexerDb, logger hclog.Logger) *BlockIndexer {
+func NewBlockIndexer(config *BlockIndexerConfig, newConfirmedBlockHandler NewConfirmedBlockHandler, db BlockIndexerDb, logger hclog.Logger) *BlockIndexer {
 	if config.AddressCheck&AddressCheckAll == 0 {
 		panic("block indexer must at least check outputs or inputs") //nolint:gocritic
 	}
@@ -72,8 +67,7 @@ func NewBlockIndexer(config *BlockIndexerConfig, newConfirmedBlockHandler NewCon
 	}
 
 	return &BlockIndexer{
-		blockSyncer: blockSyncer,
-		config:      config,
+		config: config,
 
 		latestBlockPoint: nil,
 
@@ -98,6 +92,8 @@ func (bi *BlockIndexer) RollBackwardFunc(point common.Point, tip chainsync.Tip) 
 	}
 
 	if bi.latestBlockPoint.BlockSlot == point.Slot && bytes.Equal(bi.latestBlockPoint.BlockHash, point.Hash) {
+		bi.unconfirmedBlocks = nil
+
 		// everything is ok -> we are reverting to the latest confirmed block
 		return nil
 	}
@@ -106,20 +102,7 @@ func (bi *BlockIndexer) RollBackwardFunc(point common.Point, tip chainsync.Tip) 
 	return errors.Join(errBlockIndexerFatal, fmt.Errorf("roll backward, block not found = (%d, %s)", point.Slot, hex.EncodeToString(point.Hash)))
 }
 
-func (bi *BlockIndexer) RollForwardFunc(blockType uint, blockInfo interface{}, tip chainsync.Tip) error {
-	nextBlockNumber := bi.latestBlockPoint.BlockNumber + 1
-	if len(bi.unconfirmedBlocks) > 0 {
-		nextBlockNumber = bi.unconfirmedBlocks[len(bi.unconfirmedBlocks)-1].BlockNumber + 1
-	}
-
-	blockHeader, err := GetBlockHeaderFromBlockInfo(blockType, blockInfo, nextBlockNumber)
-	if err != nil {
-		return errors.Join(errBlockIndexerFatal, err)
-	}
-
-	bi.logger.Debug("Roll forward", "number", blockHeader.BlockNumber,
-		"hash", hex.EncodeToString(blockHeader.BlockHash), "slot", tip.Point.Slot, "hash", hex.EncodeToString(tip.Point.Hash))
-
+func (bi *BlockIndexer) RollForwardFunc(blockHeader *BlockHeader, getTxsFunc GetTxsFunc, tip chainsync.Tip) error {
 	if uint(len(bi.unconfirmedBlocks)) < bi.config.ConfirmationBlockCount {
 		// If there are not enough children blocks to promote the first one to the confirmed state, a new block header is added, and the function returns
 		bi.unconfirmedBlocks = append(bi.unconfirmedBlocks, blockHeader)
@@ -127,7 +110,12 @@ func (bi *BlockIndexer) RollForwardFunc(blockType uint, blockInfo interface{}, t
 		return nil
 	}
 
-	fullBlock, latestBlockPoint, err := bi.processConfirmedBlock(bi.unconfirmedBlocks[0])
+	txs, err := getTxsFunc()
+	if err != nil {
+		return err
+	}
+
+	fullBlock, latestBlockPoint, err := bi.processConfirmedBlock(bi.unconfirmedBlocks[0], txs)
 	if err != nil {
 		return err
 	}
@@ -145,27 +133,24 @@ func (bi *BlockIndexer) RollForwardFunc(blockType uint, blockInfo interface{}, t
 	return nil
 }
 
-func (bi *BlockIndexer) ErrorHandler(err error) {
-	// retry syncing again if not fatal
-	if !errors.Is(err, errBlockIndexerFatal) {
-		bi.logger.Warn("Error happened", "err", err)
-		if err := bi.StartSyncing(); err != nil {
-			bi.logger.Warn("Error happened while trying to restart syncer", "err", err)
-		}
-	} else {
-		bi.logger.Error("Fatal error happened", "err", err)
+func (bi *BlockIndexer) NextBlockNumber() uint64 {
+	if len(bi.unconfirmedBlocks) > 0 {
+		return bi.unconfirmedBlocks[len(bi.unconfirmedBlocks)-1].BlockNumber + 1
 	}
+
+	return bi.latestBlockPoint.BlockNumber + 1
 }
 
-func (bi *BlockIndexer) StartSyncing() error {
+func (bi *BlockIndexer) SyncBlockPoint() (BlockPoint, error) {
+	var err error
+
 	if bi.latestBlockPoint == nil {
 		// read from database
-		latestBlockPoint, err := bi.db.GetLatestBlockPoint()
+		bi.latestBlockPoint, err = bi.db.GetLatestBlockPoint()
 		if err != nil {
-			return err
+			return BlockPoint{}, err
 		}
 
-		bi.latestBlockPoint = latestBlockPoint
 		// if there is nothing in database read from default config
 		if bi.latestBlockPoint == nil {
 			bi.latestBlockPoint = bi.config.StartingBlockPoint
@@ -180,21 +165,12 @@ func (bi *BlockIndexer) StartSyncing() error {
 		}
 	}
 
-	return bi.blockSyncer.Sync(bi.config.NetworkMagic, bi.config.NodeAddress, bi.latestBlockPoint.BlockSlot, bi.latestBlockPoint.BlockHash, bi)
+	return *bi.latestBlockPoint, nil
 }
 
-func (bi *BlockIndexer) Close() error {
-	return bi.blockSyncer.Close()
-}
-
-func (bi *BlockIndexer) processConfirmedBlock(confirmedBlockHeader *BlockHeader) (*FullBlock, *BlockPoint, error) {
+func (bi *BlockIndexer) processConfirmedBlock(confirmedBlockHeader *BlockHeader, allBlockTransactions []ledger.Transaction) (*FullBlock, *BlockPoint, error) {
 	if confirmedBlockHeader == nil {
 		return nil, bi.latestBlockPoint, nil
-	}
-
-	block, err := bi.blockSyncer.GetFullBlock(confirmedBlockHeader.BlockSlot, confirmedBlockHeader.BlockHash)
-	if err != nil {
-		return nil, nil, err
 	}
 
 	var (
@@ -202,8 +178,7 @@ func (bi *BlockIndexer) processConfirmedBlock(confirmedBlockHeader *BlockHeader)
 		txOutputsToSave   []*TxInputOutput
 		txOutputsToRemove []*TxInput
 
-		allBlockTransactions = block.Transactions()
-		dbTx                 = bi.db.OpenTx() // open database tx
+		dbTx = bi.db.OpenTx() // open database tx
 	)
 
 	// get all transactions of interesy from block
