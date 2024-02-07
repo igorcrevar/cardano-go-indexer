@@ -131,6 +131,15 @@ func (bs *BlockSyncerImpl) getBlock(slot uint64, hash []byte) (ledger.Block, err
 	return bs.connection.BlockFetch().Client.GetBlock(common.NewPoint(slot, hash))
 }
 
+func (bs *BlockSyncerImpl) getBlockTransactions(blockHeader *BlockHeader) ([]ledger.Transaction, error) {
+	block, err := bs.getBlock(blockHeader.BlockSlot, blockHeader.BlockHash)
+	if err != nil {
+		return nil, err
+	}
+
+	return block.Transactions(), nil
+}
+
 func (bs *BlockSyncerImpl) rollForwardCallback(blockType uint, blockInfo interface{}, tip chainsync.Tip) error {
 	blockHeader, err := GetBlockHeaderFromBlockInfo(blockType, blockInfo, bs.blockHandler.NextBlockNumber())
 	if err != nil {
@@ -140,14 +149,11 @@ func (bs *BlockSyncerImpl) rollForwardCallback(blockType uint, blockInfo interfa
 	bs.logger.Debug("Roll forward", "number", blockHeader.BlockNumber,
 		"hash", hex.EncodeToString(blockHeader.BlockHash), "slot", tip.Point.Slot, "hash", hex.EncodeToString(tip.Point.Hash))
 
-	return bs.blockHandler.RollForwardFunc(blockHeader, func() ([]ledger.Transaction, error) {
-		block, err := bs.getBlock(blockHeader.BlockSlot, blockHeader.BlockHash)
-		if err != nil {
-			return nil, err
-		}
+	getTxsFunc := func() ([]ledger.Transaction, error) {
+		return bs.getBlockTransactions(blockHeader)
+	}
 
-		return block.Transactions(), nil
-	}, tip)
+	return bs.blockHandler.RollForwardFunc(blockHeader, getTxsFunc, tip)
 }
 
 func (bs *BlockSyncerImpl) errorHandler() {
