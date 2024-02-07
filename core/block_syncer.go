@@ -101,18 +101,10 @@ func (bs *BlockSyncerImpl) Sync() error {
 		return err
 	}
 
-	var point common.Point
-
-	if len(blockPoint.BlockHash) == 0 {
-		point = common.NewPointOrigin() // from genesis
-	} else {
-		point = common.NewPoint(blockPoint.BlockSlot, blockPoint.BlockHash)
-	}
-
 	bs.logger.Debug("Syncing started", "networkMagic", bs.config.NetworkMagic, "address", bs.config.NodeAddress, "slot", blockPoint.BlockSlot, "hash", hex.EncodeToString(blockPoint.BlockHash))
 
 	// start syncing
-	if err := bs.connection.ChainSync().Client.Sync([]common.Point{point}); err != nil {
+	if err := bs.connection.ChainSync().Client.Sync([]common.Point{blockPoint.ToCommonPoint()}); err != nil {
 		return err
 	}
 

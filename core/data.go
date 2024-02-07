@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/blinklabs-io/gouroboros/ledger"
+	"github.com/blinklabs-io/gouroboros/protocol/common"
 )
 
 type BlockPoint struct {
@@ -203,6 +204,14 @@ func (ti TxInput) Key() []byte {
 
 func (fb FullBlock) Key() []byte {
 	return EncodeUint64ToBytes(fb.BlockNumber)
+}
+
+func (bp BlockPoint) ToCommonPoint() common.Point {
+	if len(bp.BlockHash) == 0 {
+		return common.NewPointOrigin() // from genesis
+	}
+
+	return common.NewPoint(bp.BlockSlot, bp.BlockHash)
 }
 
 func EncodeUint64ToBytes(value uint64) []byte {
