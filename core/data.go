@@ -214,6 +214,10 @@ func (bp BlockPoint) ToCommonPoint() common.Point {
 	return common.NewPoint(bp.BlockSlot, bp.BlockHash)
 }
 
+func (bp BlockPoint) String() string {
+	return fmt.Sprintf("slot = %d, hash = %s, num = %d", bp.BlockSlot, hex.EncodeToString(bp.BlockHash), bp.BlockNumber)
+}
+
 func EncodeUint64ToBytes(value uint64) []byte {
 	result := make([]byte, 8)
 	binary.BigEndian.PutUint64(result, value)

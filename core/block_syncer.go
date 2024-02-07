@@ -74,7 +74,7 @@ func (bs *BlockSyncerImpl) Sync() error {
 		return err
 	}
 
-	bs.logger.Debug("Start syncing requested", "networkMagic", bs.config.NetworkMagic, "address", bs.config.NodeAddress, "slot", blockPoint.BlockSlot, "hash", hex.EncodeToString(blockPoint.BlockHash))
+	bs.logger.Debug("Start syncing requested", "networkMagic", bs.config.NetworkMagic, "addr", bs.config.NodeAddress, "point", blockPoint)
 
 	if bs.connection != nil {
 		bs.connection.Close() // close previous connection
@@ -101,7 +101,7 @@ func (bs *BlockSyncerImpl) Sync() error {
 		return err
 	}
 
-	bs.logger.Debug("Syncing started", "networkMagic", bs.config.NetworkMagic, "address", bs.config.NodeAddress, "slot", blockPoint.BlockSlot, "hash", hex.EncodeToString(blockPoint.BlockHash))
+	bs.logger.Debug("Syncing started", "networkMagic", bs.config.NetworkMagic, "addr", bs.config.NodeAddress, "point", blockPoint)
 
 	// start syncing
 	if err := bs.connection.ChainSync().Client.Sync([]common.Point{blockPoint.ToCommonPoint()}); err != nil {
@@ -146,8 +146,9 @@ func (bs *BlockSyncerImpl) rollForwardCallback(blockType uint, blockInfo interfa
 		return errors.Join(errBlockSyncerFatal, err)
 	}
 
-	bs.logger.Debug("Roll forward", "number", blockHeader.BlockNumber,
-		"hash", hex.EncodeToString(blockHeader.BlockHash), "slot", tip.Point.Slot, "hash", hex.EncodeToString(tip.Point.Hash))
+	bs.logger.Debug("Roll forward",
+		"number", blockHeader.BlockNumber, "hash", hex.EncodeToString(blockHeader.BlockHash), "slot", blockHeader.BlockSlot,
+		"tip_slot", tip.Point.Slot, "tip_hash", hex.EncodeToString(tip.Point.Hash))
 
 	getTxsFunc := func() ([]ledger.Transaction, error) {
 		return bs.getBlockTransactions(blockHeader)
