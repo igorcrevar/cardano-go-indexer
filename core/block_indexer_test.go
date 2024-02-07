@@ -371,6 +371,128 @@ func TestBlockIndexer_processConfirmedBlockTxOfInterestInInputs(t *testing.T) {
 	dbMock.Writter.AssertExpectations(t)
 }
 
+func TestBlockIndexer_processConfirmedBlockKeepAllTxOutputsInDb(t *testing.T) {
+	t.Parallel()
+
+	const (
+		blockNumber = uint64(50)
+		blockSlot   = uint64(100)
+	)
+
+	hashTx := [2]string{"eee", "111"}
+	dbInputOutputs := [2]*TxInputOutput{
+		{
+			Input: &TxInput{
+				Hash:  string("xyzy"),
+				Index: uint32(20),
+			},
+			Output: &TxOutput{
+				Address: "addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd",
+				Amount:  2000,
+			},
+		},
+		{
+			Input: &TxInput{
+				Hash:  string("abcdef"),
+				Index: uint32(120),
+			},
+			Output: &TxOutput{
+				Address: "addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd",
+				Amount:  2,
+			},
+		},
+	}
+	txInputs := [2]*LedgerTransactionInputMock{
+		NewLedgerTransactionInputMock(t, []byte(dbInputOutputs[0].Input.Hash), dbInputOutputs[0].Input.Index),
+		NewLedgerTransactionInputMock(t, []byte(dbInputOutputs[1].Input.Hash), dbInputOutputs[1].Input.Index),
+	}
+	blockHash := []byte{100, 200, 100}
+	expectedLastBlockPoint := &BlockPoint{
+		BlockSlot:   blockSlot,
+		BlockHash:   blockHash,
+		BlockNumber: blockNumber,
+	}
+	config := &BlockIndexerConfig{
+		AddressCheck:         AddressCheckAll,
+		KeepAllTxOutputsInDb: true,
+	}
+	dbMock := &DatabaseMock{
+		Writter: &DbTransactionWriterMock{},
+	}
+	newConfirmedBlockHandler := func(fb *FullBlock) error {
+		return nil
+	}
+
+	allTransactions := []ledger.Transaction{
+		&LedgerTransactionMock{
+			HashVal: hashTx[0],
+			InputsVal: []ledger.TransactionInput{
+				txInputs[0],
+			},
+			OutputsVal: []ledger.TransactionOutput{
+				NewLedgerTransactionOutputMock(t, "addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd", uint64(200)),
+			},
+		},
+		&LedgerTransactionMock{
+			HashVal: hashTx[1],
+			InputsVal: []ledger.TransactionInput{
+				txInputs[1],
+			},
+			OutputsVal: []ledger.TransactionOutput{
+				NewLedgerTransactionOutputMock(t, "addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd", uint64(100)),
+			},
+		},
+	}
+
+	dbMock.On("OpenTx").Once()
+	dbMock.Writter.On("Execute").Return(error(nil)).Once()
+	dbMock.Writter.On("SetLatestBlockPoint", expectedLastBlockPoint).Once()
+	dbMock.Writter.On("AddTxOutputs", []*TxInputOutput{
+		{
+			Input:  &TxInput{Hash: hashTx[0], Index: 0},
+			Output: &TxOutput{Address: "addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd", Amount: uint64(200)},
+		},
+		{
+			Input:  &TxInput{Hash: hashTx[1], Index: 0},
+			Output: &TxOutput{Address: "addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd", Amount: uint64(100)},
+		},
+	}).Once()
+	dbMock.Writter.On("RemoveTxOutputs", []*TxInput{
+		{
+			Hash:  txInputs[0].Id().String(),
+			Index: txInputs[0].Index(),
+		},
+		{
+			Hash:  txInputs[1].Id().String(),
+			Index: txInputs[1].Index(),
+		},
+	}).Once()
+	dbMock.Writter.On("AddConfirmedBlock", mock.Anything).Run(func(args mock.Arguments) {
+		block := args.Get(0).(*FullBlock)
+		require.NotNil(t, block)
+		require.Equal(t, block.BlockHash, blockHash)
+		require.Len(t, block.Txs, 2)
+	}).Once()
+
+	blockIndexer := NewBlockIndexer(config, newConfirmedBlockHandler, dbMock, hclog.NewNullLogger())
+	assert.NotNil(t, blockIndexer)
+
+	fb, latestBlockPoint, err := blockIndexer.processConfirmedBlock(&BlockHeader{
+		BlockSlot:   blockSlot,
+		BlockHash:   blockHash,
+		BlockNumber: blockNumber,
+	}, allTransactions)
+
+	require.Nil(t, err)
+	require.NotNil(t, fb)
+	require.Len(t, fb.Txs, 2)
+	assert.Equal(t, fb.Txs[0].Hash, hashTx[0])
+	assert.Equal(t, fb.Txs[1].Hash, hashTx[1])
+	assert.Equal(t, expectedLastBlockPoint, latestBlockPoint)
+	dbMock.AssertExpectations(t)
+	dbMock.Writter.AssertExpectations(t)
+}
+
 func TestBlockIndexer_RollBackwardFuncToUnconfirmed(t *testing.T) {
 	t.Parallel()
 
@@ -490,7 +612,7 @@ func TestBlockIndexer_RollBackwardFuncError(t *testing.T) {
 		Slot: bp.BlockSlot + 10003,
 		Hash: bp.BlockHash,
 	}, chainsync.Tip{})
-	require.ErrorIs(t, err, errBlockIndexerFatal)
+	require.ErrorIs(t, err, errBlockSyncerFatal)
 
 	dbMock.AssertExpectations(t)
 }

@@ -13,10 +13,6 @@ import (
 	"github.com/hashicorp/go-hclog"
 )
 
-var (
-	errBlockIndexerFatal = errors.New("block indexer fatal error")
-)
-
 const (
 	AddressCheckNone    = 0         // No flags
 	AddressCheckInputs  = 1 << iota // 1 << 0 = 1
@@ -99,7 +95,7 @@ func (bi *BlockIndexer) RollBackwardFunc(point common.Point, tip chainsync.Tip) 
 	}
 
 	// we have confirmed some block that should not be confirmed!!!! TODO: what to do in this case?
-	return errors.Join(errBlockIndexerFatal, fmt.Errorf("roll backward, block not found = (%d, %s)", point.Slot, hex.EncodeToString(point.Hash)))
+	return errors.Join(errBlockSyncerFatal, fmt.Errorf("roll backward, block not found = (%d, %s)", point.Slot, hex.EncodeToString(point.Hash)))
 }
 
 func (bi *BlockIndexer) RollForwardFunc(blockHeader *BlockHeader, getTxsFunc GetTxsFunc, tip chainsync.Tip) error {

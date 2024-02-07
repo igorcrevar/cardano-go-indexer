@@ -13,6 +13,10 @@ import (
 	"github.com/hashicorp/go-hclog"
 )
 
+var (
+	errBlockSyncerFatal = errors.New("block syncer fatal error")
+)
+
 const (
 	ProtocolTCP  = "tcp"
 	ProtocolUnix = "unix"
@@ -138,7 +142,7 @@ func (bs *BlockSyncerImpl) getBlock(slot uint64, hash []byte) (ledger.Block, err
 func (bs *BlockSyncerImpl) rollForwardCallback(blockType uint, blockInfo interface{}, tip chainsync.Tip) error {
 	blockHeader, err := GetBlockHeaderFromBlockInfo(blockType, blockInfo, bs.blockHandler.NextBlockNumber())
 	if err != nil {
-		return errors.Join(errBlockIndexerFatal, err)
+		return errors.Join(errBlockSyncerFatal, err)
 	}
 
 	bs.logger.Debug("Roll forward", "number", blockHeader.BlockNumber,
@@ -164,15 +168,15 @@ func (bs *BlockSyncerImpl) errorHandler() {
 		return
 	}
 
-	// retry syncing again if not fatal
-	if !errors.Is(err, errBlockIndexerFatal) {
-		bs.logger.Warn("Error happened", "err", err)
+	// retry syncing again if not fatal error and if RestartOnError is true (errors.Is does not work in this case)
+	if !strings.Contains(err.Error(), errBlockSyncerFatal.Error()) && bs.config.RestartOnError {
+		bs.logger.Warn("Error happened during synchronization", "err", err)
 
 		time.Sleep(bs.config.RestartDelay)
 		if err := bs.Sync(); err != nil {
-			bs.logger.Warn("Error happened while trying to restart syncer", "err", err)
+			bs.logger.Warn("Error happened while trying to restart the synchronization", "err", err)
 		}
 	} else {
-		bs.logger.Error("Fatal error happened", "err", err)
+		bs.logger.Error("Error happened during synchronization. Restart the syncer manually.", "err", err)
 	}
 }
