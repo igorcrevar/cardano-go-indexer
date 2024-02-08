@@ -88,12 +88,17 @@ func (bi *BlockIndexer) RollBackwardFunc(point common.Point, tip chainsync.Tip) 
 		if unc.header.BlockSlot == point.Slot && bytes.Equal(unc.header.BlockHash, point.Hash) {
 			bi.unconfirmedBlocks = bi.unconfirmedBlocks[:i+1]
 
+			bi.logger.Info("Roll backward to unconfirmed block", "no", i, "block", unc.header.BlockNumber,
+				"hash", hex.EncodeToString(unc.header.BlockHash), "slot", unc.header.BlockSlot)
+
 			return nil
 		}
 	}
 
 	if bi.latestBlockPoint.BlockSlot == point.Slot && bytes.Equal(bi.latestBlockPoint.BlockHash, point.Hash) {
 		bi.unconfirmedBlocks = nil
+		bi.logger.Info("Roll backward to confirmed block", "block", bi.latestBlockPoint.BlockNumber,
+			"hash", hex.EncodeToString(bi.latestBlockPoint.BlockHash), "slot", bi.latestBlockPoint.BlockSlot)
 
 		// everything is ok -> we are reverting to the latest confirmed block
 		return nil
