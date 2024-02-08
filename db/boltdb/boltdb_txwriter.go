@@ -76,7 +76,7 @@ func (tw *BoltDbTransactionWriter) AddConfirmedBlock(block *core.FullBlock) core
 	return tw
 }
 
-func (tw *BoltDbTransactionWriter) RemoveTxOutputs(txInputs []*core.TxInput) core.DbTransactionWriter {
+func (tw *BoltDbTransactionWriter) RemoveTxOutputs(txInputs []*core.TxInput, softDelete bool) core.DbTransactionWriter {
 	if len(txInputs) == 0 {
 		return tw
 	}
@@ -85,8 +85,29 @@ func (tw *BoltDbTransactionWriter) RemoveTxOutputs(txInputs []*core.TxInput) cor
 		bucket := tx.Bucket(txOutputsBucket)
 
 		for _, inp := range txInputs {
-			if err := bucket.Delete(inp.Key()); err != nil {
-				return err
+			key := inp.Key()
+
+			if !softDelete {
+				if err := bucket.Delete(key); err != nil {
+					return fmt.Errorf("delete utxo error: %v", err)
+				}
+			} else if data := bucket.Get(key); len(data) > 0 {
+				var result core.TxOutput
+
+				if err := json.Unmarshal(data, &result); err != nil {
+					return fmt.Errorf("soft delete unmarshal utxo error: %v", err)
+				}
+
+				result.IsUsed = true
+
+				bytes, err := json.Marshal(result)
+				if err != nil {
+					return fmt.Errorf("soft delete marshal utxo error: %v", err)
+				}
+
+				if err := bucket.Put(key, bytes); err != nil {
+					return fmt.Errorf("soft delete put utxo error: %v", err)
+				}
 			}
 		}
 

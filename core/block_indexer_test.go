@@ -69,7 +69,7 @@ func TestBlockIndexer_processConfirmedBlockNoTxOfInterest(t *testing.T) {
 	dbMock.On("GetTxOutput", mock.Anything).Return((*TxOutput)(nil), error(nil)).Times(3)
 	dbMock.Writter.On("Execute").Return(error(nil)).Once()
 	dbMock.Writter.On("SetLatestBlockPoint", expectedLastBlockPoint).Once()
-	dbMock.Writter.On("RemoveTxOutputs", ([]*TxInput)(nil)).Once()
+	dbMock.Writter.On("RemoveTxOutputs", ([]*TxInput)(nil), false).Once()
 	dbMock.Writter.On("AddTxOutputs", ([]*TxInputOutput)(nil)).Once()
 
 	blockIndexer := NewBlockIndexer(config, newConfirmedBlockHandler, dbMock, hclog.NewNullLogger())
@@ -118,6 +118,7 @@ func TestBlockIndexer_processConfirmedBlockTxOfInterestInOutputs(t *testing.T) {
 	config := &BlockIndexerConfig{
 		AddressCheck:        AddressCheckAll,
 		AddressesOfInterest: addressesOfInterest,
+		SoftDeleteUtxo:      true,
 	}
 	dbMock := &DatabaseMock{
 		Writter: &DbTransactionWriterMock{},
@@ -173,7 +174,7 @@ func TestBlockIndexer_processConfirmedBlockTxOfInterestInOutputs(t *testing.T) {
 			Hash:  txInputs[2].Id().String(),
 			Index: txInputs[2].Index(),
 		},
-	}).Once()
+	}, true).Once()
 	dbMock.Writter.On("AddTxOutputs", []*TxInputOutput{
 		{
 			Input: &TxInput{
@@ -343,7 +344,7 @@ func TestBlockIndexer_processConfirmedBlockTxOfInterestInInputs(t *testing.T) {
 			Hash:  txInputs[3].Id().String(),
 			Index: txInputs[3].Index(),
 		},
-	}).Once()
+	}, false).Once()
 	dbMock.Writter.On("AddConfirmedBlock", mock.Anything).Run(func(args mock.Arguments) {
 		block := args.Get(0).(*FullBlock)
 		require.NotNil(t, block)
@@ -465,7 +466,7 @@ func TestBlockIndexer_processConfirmedBlockKeepAllTxOutputsInDb(t *testing.T) {
 			Hash:  txInputs[1].Id().String(),
 			Index: txInputs[1].Index(),
 		},
-	}).Once()
+	}, false).Once()
 	dbMock.Writter.On("AddConfirmedBlock", mock.Anything).Run(func(args mock.Arguments) {
 		block := args.Get(0).(*FullBlock)
 		require.NotNil(t, block)
@@ -695,7 +696,7 @@ func TestBlockIndexer_RollForwardFunc(t *testing.T) {
 			dbMock.On("OpenTx").Once()
 			dbMock.Writter.On("Execute").Return(error(nil)).Once()
 			dbMock.Writter.On("AddTxOutputs", ([]*TxInputOutput)(nil)).Once()
-			dbMock.Writter.On("RemoveTxOutputs", []*TxInput(nil)).Once()
+			dbMock.Writter.On("RemoveTxOutputs", []*TxInput(nil), false).Once()
 			dbMock.Writter.On("AddConfirmedBlock", mock.Anything).Once()
 			dbMock.Writter.On("SetLatestBlockPoint", &BlockPoint{
 				BlockSlot:   blockHeaders[i-2].BlockSlot,

@@ -4,7 +4,7 @@ type DbTransactionWriter interface {
 	SetLatestBlockPoint(point *BlockPoint) DbTransactionWriter
 	AddTxOutputs(txOutputs []*TxInputOutput) DbTransactionWriter
 	AddConfirmedBlock(block *FullBlock) DbTransactionWriter
-	RemoveTxOutputs(txInputs []*TxInput) DbTransactionWriter
+	RemoveTxOutputs(txInputs []*TxInput, softDelete bool) DbTransactionWriter
 	Execute() error
 }
 

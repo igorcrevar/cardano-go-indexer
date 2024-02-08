@@ -31,6 +31,8 @@ type BlockIndexerConfig struct {
 	KeepAllTxOutputsInDb bool `json:"keepAllTxOutputsInDb"`
 
 	AddressCheck int `json:"addressCheck"`
+
+	SoftDeleteUtxo bool `json:"softDeleteUtxo"`
 }
 
 type NewConfirmedBlockHandler func(*FullBlock) error
@@ -220,8 +222,8 @@ func (bi *BlockIndexer) processConfirmedBlock(confirmedBlockHeader *BlockHeader,
 		BlockHash:   confirmedBlockHeader.BlockHash,
 		BlockNumber: confirmedBlockHeader.BlockNumber,
 	}
-	dbTx.SetLatestBlockPoint(latestBlockPoint)                            // update latest block point in db tx
-	dbTx.AddTxOutputs(txOutputsToSave).RemoveTxOutputs(txOutputsToRemove) // add all needed outputs, remove used ones in db tx
+	dbTx.SetLatestBlockPoint(latestBlockPoint)                                                      // update latest block point in db tx
+	dbTx.AddTxOutputs(txOutputsToSave).RemoveTxOutputs(txOutputsToRemove, bi.config.SoftDeleteUtxo) // add all needed outputs, remove used ones in db tx
 
 	// update database -> execute db transaction
 	if err := dbTx.Execute(); err != nil {
@@ -279,7 +281,7 @@ func (bi *BlockIndexer) isTxInputOfInterest(tx ledger.Transaction) (bool, error)
 		})
 		if err != nil {
 			return false, err
-		} else if txOutput != nil && bi.addressesOfInterest[txOutput.Address] {
+		} else if txOutput != nil && !txOutput.IsUsed && bi.addressesOfInterest[txOutput.Address] {
 			return true, nil
 		}
 	}

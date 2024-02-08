@@ -158,8 +158,8 @@ func (m *DbTransactionWriterMock) Execute() error {
 }
 
 // RemoveTxOutputs implements DbTransactionWriter.
-func (m *DbTransactionWriterMock) RemoveTxOutputs(txInputs []*TxInput) DbTransactionWriter {
-	m.Called(txInputs)
+func (m *DbTransactionWriterMock) RemoveTxOutputs(txInputs []*TxInput, softDelete bool) DbTransactionWriter {
+	m.Called(txInputs, softDelete)
 
 	if m.RemoveTxOutputsFn != nil {
 		return m.RemoveTxOutputsFn(txInputs)
