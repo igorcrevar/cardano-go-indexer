@@ -37,6 +37,11 @@ func (m *BlockSyncerMock) Sync() error {
 	return args.Error(0)
 }
 
+// ErrorCh implements BlockSyncer.
+func (m *BlockSyncerMock) ErrorCh() <-chan error {
+	return make(<-chan error)
+}
+
 var _ BlockSyncer = (*BlockSyncerMock)(nil)
 
 type DatabaseMock struct {
