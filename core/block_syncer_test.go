@@ -52,7 +52,7 @@ func (hMock *BlockSyncerHandlerMock) RollForwardFunc(blockHeader *BlockHeader, g
 	return nil
 }
 
-func (hMock *BlockSyncerHandlerMock) SyncBlockPoint() (BlockPoint, error) {
+func (hMock *BlockSyncerHandlerMock) Reset() (BlockPoint, error) {
 	if hMock.BlockPoint == nil {
 		return BlockPoint{}, errors.New("error sync block point")
 	}

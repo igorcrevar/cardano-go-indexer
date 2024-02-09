@@ -151,19 +151,18 @@ func (bi *BlockIndexer) RollForwardFunc(blockHeader *BlockHeader, getTxsFunc Get
 
 func (bi *BlockIndexer) NextBlockNumber() uint64 {
 	if len(bi.unconfirmedBlocks) > 0 {
+		bi.logger.Debug("Retrieve NextBlockNumber", "num", bi.unconfirmedBlocks[len(bi.unconfirmedBlocks)-1].header.BlockNumber+1, "cnt", len(bi.unconfirmedBlocks))
+
 		return bi.unconfirmedBlocks[len(bi.unconfirmedBlocks)-1].header.BlockNumber + 1
 	}
+
+	bi.logger.Debug("Retrieve NextBlockNumber from the latest block point", "num", bi.latestBlockPoint.BlockNumber+1)
 
 	return bi.latestBlockPoint.BlockNumber + 1
 }
 
-func (bi *BlockIndexer) SyncBlockPoint() (BlockPoint, error) {
-	// if latest point block is set return it
-	if bi.latestBlockPoint != nil {
-		return *bi.latestBlockPoint, nil
-	}
-
-	// ...else try to read latest point block from the database
+func (bi *BlockIndexer) Reset() (BlockPoint, error) {
+	// try to read latest point block from the database
 	latestPoint, err := bi.db.GetLatestBlockPoint()
 	if err != nil {
 		return BlockPoint{}, err
@@ -182,6 +181,7 @@ func (bi *BlockIndexer) SyncBlockPoint() (BlockPoint, error) {
 	}
 
 	bi.latestBlockPoint = latestPoint
+	bi.unconfirmedBlocks = nil // clear all unconfirmed from the memory
 
 	return *latestPoint, nil
 }
