@@ -86,7 +86,7 @@ func (bs *BlockSyncerImpl) Sync() (err error) {
 		err = bs.syncExecute()
 		if err == nil {
 			break
-		} else {
+		} else if i < cntTries {
 			time.Sleep(bs.config.RestartDelay)
 			bs.logger.Warn("Error while starting sync", "err", err, "attempt", i, "of", cntTries)
 		}
