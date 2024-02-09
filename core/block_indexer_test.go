@@ -526,13 +526,14 @@ func TestBlockIndexer_RollBackwardFuncToUnconfirmed(t *testing.T) {
 		return nil
 	}
 	blockIndexer := NewBlockIndexer(config, newConfirmedBlockHandler, dbMock, hclog.NewNullLogger())
-	blockIndexer.unconfirmedBlocks = uncomfBlocks
 
 	dbMock.On("GetLatestBlockPoint").Return((*BlockPoint)(nil), error(nil)).Once()
 
-	sp, err := blockIndexer.SyncBlockPoint()
+	sp, err := blockIndexer.Reset()
 	require.NoError(t, err)
 	require.Equal(t, *bp, sp)
+
+	blockIndexer.unconfirmedBlocks = uncomfBlocks
 
 	err = blockIndexer.RollBackwardFunc(common.Point{
 		Slot: 7,
@@ -572,14 +573,9 @@ func TestBlockIndexer_RollBackwardFuncToConfirmed(t *testing.T) {
 	}
 	blockIndexer := NewBlockIndexer(config, newConfirmedBlockHandler, dbMock, hclog.NewNullLogger())
 	blockIndexer.unconfirmedBlocks = uncomfBlocks
+	blockIndexer.latestBlockPoint = bp
 
-	dbMock.On("GetLatestBlockPoint").Return(bp, error(nil)).Once()
-
-	sp, err := blockIndexer.SyncBlockPoint()
-	require.NoError(t, err)
-	require.Equal(t, *bp, sp)
-
-	err = blockIndexer.RollBackwardFunc(common.Point{
+	err := blockIndexer.RollBackwardFunc(common.Point{
 		Slot: bp.BlockSlot,
 		Hash: bp.BlockHash,
 	}, chainsync.Tip{})
@@ -620,7 +616,7 @@ func TestBlockIndexer_RollBackwardFuncError(t *testing.T) {
 
 	dbMock.On("GetLatestBlockPoint").Return((*BlockPoint)(nil), error(nil)).Once()
 
-	sp, err := blockIndexer.SyncBlockPoint()
+	sp, err := blockIndexer.Reset()
 	require.NoError(t, err)
 	require.Nil(t, sp.BlockHash)
 

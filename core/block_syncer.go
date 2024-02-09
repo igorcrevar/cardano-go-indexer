@@ -20,6 +20,8 @@ var (
 const (
 	ProtocolTCP  = "tcp"
 	ProtocolUnix = "unix"
+
+	syncStartTriesDefault = 4
 )
 
 type GetTxsFunc func() ([]ledger.Transaction, error)
@@ -33,7 +35,7 @@ type BlockSyncer interface {
 type BlockSyncerHandler interface {
 	RollBackwardFunc(point common.Point, tip chainsync.Tip) error
 	RollForwardFunc(blockHeader *BlockHeader, getTxsFunc GetTxsFunc, tip chainsync.Tip) error
-	SyncBlockPoint() (BlockPoint, error)
+	Reset() (BlockPoint, error)
 	NextBlockNumber() uint64
 }
 
@@ -42,6 +44,8 @@ type BlockSyncerConfig struct {
 	NodeAddress    string        `json:"nodeAddress"`
 	RestartOnError bool          `json:"restartOnError"`
 	RestartDelay   time.Duration `json:"restartDelay"`
+	SyncStartTries int           `json:"syncStartTries"`
+	KeepAlive      bool          `json:"keepAlive"`
 }
 
 func (bsc BlockSyncerConfig) Protocol() string {
@@ -72,8 +76,39 @@ func NewBlockSyncer(config *BlockSyncerConfig, blockHandler BlockSyncerHandler, 
 	}
 }
 
-func (bs *BlockSyncerImpl) Sync() error {
-	blockPoint, err := bs.blockHandler.SyncBlockPoint()
+func (bs *BlockSyncerImpl) Sync() (err error) {
+	cntTries := bs.config.SyncStartTries
+	if cntTries <= 0 {
+		cntTries = syncStartTriesDefault
+	}
+
+	for i := 1; i <= cntTries; i++ {
+		err = bs.syncExecute()
+		if err == nil {
+			break
+		} else {
+			time.Sleep(bs.config.RestartDelay)
+			bs.logger.Warn("Error while starting sync", "err", err, "attempt", i, "of", cntTries)
+		}
+	}
+
+	return err
+}
+
+func (bs *BlockSyncerImpl) Close() error {
+	if bs.connection == nil {
+		return nil
+	}
+
+	return bs.connection.Close()
+}
+
+func (bs *BlockSyncerImpl) ErrorCh() <-chan error {
+	return bs.errorCh
+}
+
+func (bs *BlockSyncerImpl) syncExecute() error {
+	blockPoint, err := bs.blockHandler.Reset()
 	if err != nil {
 		return err
 	}
@@ -81,14 +116,16 @@ func (bs *BlockSyncerImpl) Sync() error {
 	bs.logger.Debug("Start syncing requested", "networkMagic", bs.config.NetworkMagic, "addr", bs.config.NodeAddress, "point", blockPoint)
 
 	if bs.connection != nil {
-		bs.connection.Close() // close previous connection
+		if err := bs.connection.Close(); err != nil { // close previous connection
+			bs.logger.Warn("Error while closing previous connection", "err", err)
+		}
 	}
 
 	// create connection
 	connection, err := ouroboros.NewConnection(
 		ouroboros.WithNetworkMagic(bs.config.NetworkMagic),
 		ouroboros.WithNodeToNode(true),
-		ouroboros.WithKeepAlive(true),
+		ouroboros.WithKeepAlive(bs.config.KeepAlive),
 		ouroboros.WithChainSyncConfig(chainsync.NewConfig(
 			chainsync.WithRollBackwardFunc(bs.blockHandler.RollBackwardFunc),
 			chainsync.WithRollForwardFunc(bs.rollForwardCallback),
@@ -116,18 +153,6 @@ func (bs *BlockSyncerImpl) Sync() error {
 	go bs.errorHandler()
 
 	return nil
-}
-
-func (bs *BlockSyncerImpl) Close() error {
-	if bs.connection == nil {
-		return nil
-	}
-
-	return bs.connection.Close()
-}
-
-func (bs *BlockSyncerImpl) ErrorCh() <-chan error {
-	return bs.errorCh
 }
 
 func (bs *BlockSyncerImpl) getBlock(slot uint64, hash []byte) (ledger.Block, error) {
