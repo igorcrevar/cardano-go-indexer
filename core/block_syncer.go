@@ -27,6 +27,7 @@ type GetTxsFunc func() ([]ledger.Transaction, error)
 type BlockSyncer interface {
 	Sync() error
 	Close() error
+	ErrorCh() <-chan error
 }
 
 type BlockSyncerHandler interface {
@@ -56,6 +57,8 @@ type BlockSyncerImpl struct {
 	blockHandler BlockSyncerHandler
 	config       *BlockSyncerConfig
 	logger       hclog.Logger
+
+	errorCh chan error
 }
 
 var _ BlockSyncer = (*BlockSyncerImpl)(nil)
@@ -65,6 +68,7 @@ func NewBlockSyncer(config *BlockSyncerConfig, blockHandler BlockSyncerHandler, 
 		blockHandler: blockHandler,
 		config:       config,
 		logger:       logger,
+		errorCh:      make(chan error, 1),
 	}
 }
 
@@ -122,6 +126,10 @@ func (bs *BlockSyncerImpl) Close() error {
 	return bs.connection.Close()
 }
 
+func (bs *BlockSyncerImpl) ErrorCh() <-chan error {
+	return bs.errorCh
+}
+
 func (bs *BlockSyncerImpl) getBlock(slot uint64, hash []byte) (ledger.Block, error) {
 	bs.logger.Debug("Get full block", "slot", slot, "hash", hex.EncodeToString(hash), "connected", bs.connection != nil)
 	if bs.connection == nil {
@@ -173,9 +181,11 @@ func (bs *BlockSyncerImpl) errorHandler() {
 
 		time.Sleep(bs.config.RestartDelay)
 		if err := bs.Sync(); err != nil {
-			bs.logger.Warn("Error happened while trying to restart the synchronization", "err", err)
+			bs.logger.Error("Error happened while trying to restart the synchronization", "err", err)
+			bs.errorCh <- err // propagate error
 		}
 	} else {
 		bs.logger.Error("Error happened during synchronization. Restart the syncer manually.", "err", err)
+		bs.errorCh <- err // propagate error
 	}
 }

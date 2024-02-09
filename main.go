@@ -96,5 +96,8 @@ func main() {
 	// Notify the signalChannel when the interrupt signal is received (Ctrl+C)
 	signal.Notify(signalChannel, os.Interrupt, syscall.SIGTERM)
 
-	<-signalChannel
+	select {
+	case <-signalChannel:
+	case <-syncer.ErrorCh():
+	}
 }

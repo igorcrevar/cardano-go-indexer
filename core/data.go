@@ -11,6 +11,11 @@ import (
 	"github.com/blinklabs-io/gouroboros/protocol/common"
 )
 
+type Witness struct {
+	VKey      []byte `json:"vkey"`
+	Signature []byte `json:"sign"`
+}
+
 type BlockPoint struct {
 	BlockSlot   uint64 `json:"slot"`
 	BlockHash   []byte `json:"hash"`
@@ -35,11 +40,12 @@ type FullBlock struct {
 }
 
 type Tx struct {
-	Hash     string      `json:"hash"`
-	Metadata []byte      `json:"metadata"`
-	Inputs   []*TxInput  `json:"inputs"`
-	Outputs  []*TxOutput `json:"outputs"`
-	Fee      uint64      `json:"fee"`
+	Hash      string      `json:"hash"`
+	Metadata  []byte      `json:"metadata"`
+	Inputs    []*TxInput  `json:"inputs"`
+	Outputs   []*TxOutput `json:"outputs"`
+	Fee       uint64      `json:"fee"`
+	Witnesses []Witness   `json:"witness"`
 }
 
 type TxInput struct {
@@ -50,6 +56,7 @@ type TxInput struct {
 type TxOutput struct {
 	Address string `json:"address"`
 	Amount  uint64 `json:"amount"`
+	IsUsed  bool   `json:"isUsed"`
 }
 
 type TxInputOutput struct {
@@ -135,6 +142,23 @@ func NewTransaction(ledgerTx ledger.Transaction) *Tx {
 		}
 	}
 
+	switch realTx := ledgerTx.(type) {
+	case *ledger.AllegraTransaction:
+		tx.Witnesses = NewWitnesses(realTx.WitnessSet.VkeyWitnesses)
+	case *ledger.AlonzoTransaction:
+		tx.Witnesses = NewWitnesses(realTx.WitnessSet.VkeyWitnesses)
+	case *ledger.BabbageTransaction:
+		tx.Witnesses = NewWitnesses(realTx.WitnessSet.VkeyWitnesses)
+	case *ledger.ByronTransaction:
+		// not supported
+	case *ledger.ConwayTransaction:
+		tx.Witnesses = NewWitnesses(realTx.WitnessSet.VkeyWitnesses)
+	case *ledger.MaryTransaction:
+		tx.Witnesses = NewWitnesses(realTx.WitnessSet.VkeyWitnesses)
+	case *ledger.ShelleyTransaction:
+		tx.Witnesses = NewWitnesses(realTx.WitnessSet.VkeyWitnesses)
+	}
+
 	return tx
 }
 
@@ -149,6 +173,30 @@ func NewTransactions(ledgerTxs []ledger.Transaction) []*Tx {
 	}
 
 	return result
+}
+
+func NewWitnesses(vkeyWitnesses []interface{}) []Witness {
+	res := make([]Witness, len(vkeyWitnesses))
+
+	for i, vv := range vkeyWitnesses {
+		arr, ok1 := vv.([]interface{})
+		if !ok1 || len(arr) != 2 {
+			panic("wrong key inside block") //nolint:gocritic
+		}
+
+		key, ok2 := arr[0].([]byte)
+		sign, ok3 := arr[1].([]byte)
+		if !ok2 || !ok3 {
+			panic("wrong key inside block") //nolint:gocritic
+		}
+
+		res[i] = Witness{
+			VKey:      key,
+			Signature: sign,
+		}
+	}
+
+	return res
 }
 
 func (fb FullBlock) String() string {

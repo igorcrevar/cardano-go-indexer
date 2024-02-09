@@ -37,6 +37,11 @@ func (m *BlockSyncerMock) Sync() error {
 	return args.Error(0)
 }
 
+// ErrorCh implements BlockSyncer.
+func (m *BlockSyncerMock) ErrorCh() <-chan error {
+	return make(<-chan error)
+}
+
 var _ BlockSyncer = (*BlockSyncerMock)(nil)
 
 type DatabaseMock struct {
@@ -158,8 +163,8 @@ func (m *DbTransactionWriterMock) Execute() error {
 }
 
 // RemoveTxOutputs implements DbTransactionWriter.
-func (m *DbTransactionWriterMock) RemoveTxOutputs(txInputs []*TxInput) DbTransactionWriter {
-	m.Called(txInputs)
+func (m *DbTransactionWriterMock) RemoveTxOutputs(txInputs []*TxInput, softDelete bool) DbTransactionWriter {
+	m.Called(txInputs, softDelete)
 
 	if m.RemoveTxOutputsFn != nil {
 		return m.RemoveTxOutputsFn(txInputs)
