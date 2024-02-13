@@ -52,7 +52,7 @@ func main() {
 	db := &boltdb.BoltDatabase{}
 	if err := db.Init("burek.db"); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		logger.Error("error: ", err)
+		logger.Error("Open database failed", "err", err)
 		os.Exit(1)
 	}
 
@@ -72,12 +72,14 @@ func main() {
 		AddressCheck:           core.AddressCheckAll,
 		ConfirmationBlockCount: 10,
 		AddressesOfInterest:    addressesOfInterest,
+		SoftDeleteUtxo:         true,
 	}
 	syncerConfig := &core.BlockSyncerConfig{
 		NetworkMagic:   networkMagic,
 		NodeAddress:    address,
 		RestartOnError: true,
 		RestartDelay:   time.Second * 5,
+		KeepAlive:      true,
 	}
 
 	indexer := core.NewBlockIndexer(indexerConfig, confirmedBlockHandler, db, logger.Named("block_indexer"))
@@ -88,7 +90,7 @@ func main() {
 	err = syncer.Sync()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		logger.Error("error: ", err)
+		logger.Error("Start syncing failed", "err", err)
 		os.Exit(1)
 	}
 

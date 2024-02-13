@@ -212,6 +212,8 @@ func TestSyncWithExistingConnection(t *testing.T) {
 	)
 	require.NoError(t, err)
 
+	require.NoError(t, connection.Dial(ProtocolTCP, NodeAddress))
+
 	syncer.connection = connection
 	err = syncer.Sync()
 	require.Nil(t, err)

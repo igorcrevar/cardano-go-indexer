@@ -3,7 +3,7 @@ module igorcrevar/cardano-go-syncer
 go 1.20
 
 require (
-	github.com/blinklabs-io/gouroboros v0.69.3
+	github.com/blinklabs-io/gouroboros v0.70.2
 	github.com/boltdb/bolt v1.3.1
 	github.com/hashicorp/go-hclog v1.6.2
 	github.com/stretchr/testify v1.8.4
@@ -19,7 +19,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/objx v0.5.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/crypto v0.17.0 // indirect
-	golang.org/x/sys v0.15.0 // indirect
+	golang.org/x/crypto v0.19.0 // indirect
+	golang.org/x/sys v0.17.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

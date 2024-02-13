@@ -187,10 +187,6 @@ func (bi *BlockIndexer) Reset() (BlockPoint, error) {
 }
 
 func (bi *BlockIndexer) processConfirmedBlock(confirmedBlockHeader *BlockHeader, allBlockTransactions []ledger.Transaction) (*FullBlock, *BlockPoint, error) {
-	if confirmedBlockHeader == nil {
-		return nil, bi.latestBlockPoint, nil
-	}
-
 	var (
 		fullBlock         *FullBlock = nil
 		txOutputsToSave   []*TxInputOutput
