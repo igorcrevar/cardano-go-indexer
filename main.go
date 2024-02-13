@@ -72,12 +72,14 @@ func main() {
 		AddressCheck:           core.AddressCheckAll,
 		ConfirmationBlockCount: 10,
 		AddressesOfInterest:    addressesOfInterest,
+		SoftDeleteUtxo:         true,
 	}
 	syncerConfig := &core.BlockSyncerConfig{
 		NetworkMagic:   networkMagic,
 		NodeAddress:    address,
 		RestartOnError: true,
 		RestartDelay:   time.Second * 5,
+		KeepAlive:      true,
 	}
 
 	indexer := core.NewBlockIndexer(indexerConfig, confirmedBlockHandler, db, logger.Named("block_indexer"))

@@ -108,18 +108,20 @@ func (bs *BlockSyncerImpl) ErrorCh() <-chan error {
 }
 
 func (bs *BlockSyncerImpl) syncExecute() error {
+	if oldConn := bs.connection; oldConn != nil {
+		if err := oldConn.Close(); err != nil { // close previous connection
+			bs.logger.Warn("Error while closing previous connection", "err", err)
+		} else {
+			<-oldConn.ErrorChan() // error channel will be closed after connection closing is done!
+		}
+	}
+
 	blockPoint, err := bs.blockHandler.Reset()
 	if err != nil {
 		return err
 	}
 
 	bs.logger.Debug("Start syncing requested", "networkMagic", bs.config.NetworkMagic, "addr", bs.config.NodeAddress, "point", blockPoint)
-
-	if bs.connection != nil {
-		if err := bs.connection.Close(); err != nil { // close previous connection
-			bs.logger.Warn("Error while closing previous connection", "err", err)
-		}
-	}
 
 	// create connection
 	connection, err := ouroboros.NewConnection(
@@ -135,17 +137,17 @@ func (bs *BlockSyncerImpl) syncExecute() error {
 		return err
 	}
 
-	bs.connection = connection
-
 	// dial node -> connect to node
-	if err := bs.connection.Dial(bs.config.Protocol(), bs.config.NodeAddress); err != nil {
+	if err := connection.Dial(bs.config.Protocol(), bs.config.NodeAddress); err != nil {
 		return err
 	}
+
+	bs.connection = connection
 
 	bs.logger.Debug("Syncing started", "networkMagic", bs.config.NetworkMagic, "addr", bs.config.NodeAddress, "point", blockPoint)
 
 	// start syncing
-	if err := bs.connection.ChainSync().Client.Sync([]common.Point{blockPoint.ToCommonPoint()}); err != nil {
+	if err := connection.ChainSync().Client.Sync([]common.Point{blockPoint.ToCommonPoint()}); err != nil {
 		return err
 	}
 
@@ -197,6 +199,8 @@ func (bs *BlockSyncerImpl) errorHandler() {
 
 	err, ok := <-bs.connection.ErrorChan()
 	if !ok {
+		close(bs.errorCh)
+
 		return
 	}
 
