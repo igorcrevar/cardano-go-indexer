@@ -17,6 +17,7 @@ type BlockIndexerDb interface {
 type Database interface {
 	BlockIndexerDb
 	Init(filepath string) error
+	Close() error
 
 	MarkConfirmedBlockProcessed(block *FullBlock) error
 	GetUnprocessedConfirmedBlocks() ([]*FullBlock, error)
