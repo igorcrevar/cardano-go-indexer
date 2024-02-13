@@ -15,3 +15,12 @@ func NewDatabase(name string) core.Database {
 		return &boltdb.BoltDatabase{}
 	}
 }
+
+func NewDatabaseInit(name string, filePath string) (core.Database, error) {
+	db := NewDatabase(name)
+	if err := db.Init(filePath); err != nil {
+		return nil, err
+	}
+
+	return db, nil
+}

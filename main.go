@@ -49,8 +49,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	dbs := db.NewDatabase("leveldb")
-	if err := dbs.Init("burek.db"); err != nil {
+	dbs, err := db.NewDatabaseInit("leveldb", "burek.db")
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		logger.Error("Open database failed", "err", err)
 		os.Exit(1)
