@@ -52,7 +52,7 @@ func main() {
 	db := &boltdb.BoltDatabase{}
 	if err := db.Init("burek.db"); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		logger.Error("error: ", err)
+		logger.Error("Open database failed", "err", err)
 		os.Exit(1)
 	}
 
@@ -90,7 +90,7 @@ func main() {
 	err = syncer.Sync()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		logger.Error("error: ", err)
+		logger.Error("Start syncing failed", "err", err)
 		os.Exit(1)
 	}
 
