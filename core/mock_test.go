@@ -120,6 +120,10 @@ func (m *DatabaseMock) OpenTx() DbTransactionWriter {
 	return args.Get(0).(DbTransactionWriter)
 }
 
+func (m *DatabaseMock) Close() error {
+	return m.Called().Error(0)
+}
+
 var _ Database = (*DatabaseMock)(nil)
 
 type DbTransactionWriterMock struct {

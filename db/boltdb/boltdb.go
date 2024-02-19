@@ -26,7 +26,7 @@ var _ core.Database = (*BoltDatabase)(nil)
 func (bd *BoltDatabase) Init(filePath string) error {
 	db, err := bolt.Open(filePath, 0600, nil)
 	if err != nil {
-		return fmt.Errorf("could not open db, %v", err)
+		return fmt.Errorf("could not open db: %v", err)
 	}
 
 	bd.db = db
@@ -41,6 +41,10 @@ func (bd *BoltDatabase) Init(filePath string) error {
 
 		return nil
 	})
+}
+
+func (bd *BoltDatabase) Close() error {
+	return bd.db.Close()
 }
 
 func (bd *BoltDatabase) GetLatestBlockPoint() (*core.BlockPoint, error) {

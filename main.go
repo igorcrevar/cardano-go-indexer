@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"igorcrevar/cardano-go-syncer/core"
-	"igorcrevar/cardano-go-syncer/db/boltdb"
+	"igorcrevar/cardano-go-syncer/db"
 
 	"github.com/hashicorp/go-hclog"
 )
@@ -49,12 +49,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	db := &boltdb.BoltDatabase{}
-	if err := db.Init("burek.db"); err != nil {
+	dbs, err := db.NewDatabaseInit("leveldb", "burek.db")
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		logger.Error("Open database failed", "err", err)
 		os.Exit(1)
 	}
+
+	defer dbs.Close()
 
 	confirmedBlockHandler := func(block *core.FullBlock) error {
 		// blocks, err := db.GetUnprocessedConfirmedBlocks()
@@ -78,11 +80,11 @@ func main() {
 		NetworkMagic:   networkMagic,
 		NodeAddress:    address,
 		RestartOnError: true,
-		RestartDelay:   time.Second * 5,
+		RestartDelay:   time.Second * 2,
 		KeepAlive:      true,
 	}
 
-	indexer := core.NewBlockIndexer(indexerConfig, confirmedBlockHandler, db, logger.Named("block_indexer"))
+	indexer := core.NewBlockIndexer(indexerConfig, confirmedBlockHandler, dbs, logger.Named("block_indexer"))
 
 	syncer := core.NewBlockSyncer(syncerConfig, indexer, logger.Named("block_syncer"))
 	defer syncer.Close()
