@@ -99,8 +99,8 @@ func (m *DatabaseMock) Init(filepath string) error {
 }
 
 // MarkConfirmedBlockProcessed implements Database.
-func (m *DatabaseMock) MarkConfirmedBlockProcessed(block *FullBlock) error {
-	args := m.Called(block)
+func (m *DatabaseMock) MarkConfirmedBlockProcessed(block *FullBlock, process func() error) error {
+	args := m.Called(block, process)
 
 	if m.MarkConfirmedBlockProcessedFn != nil {
 		return m.MarkConfirmedBlockProcessedFn(block)

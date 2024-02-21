@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"igorcrevar/cardano-go-syncer/core"
-	"igorcrevar/cardano-go-syncer/db"
+	"github.com/igorcrevar/cardano-go-indexer/core"
+	"github.com/igorcrevar/cardano-go-indexer/db"
 
 	"github.com/hashicorp/go-hclog"
 )
@@ -49,7 +49,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	dbs, err := db.NewDatabaseInit("leveldb", "burek.db")
+	dbs, err := db.NewDatabaseInit("", "burek.db")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		logger.Error("Open database failed", "err", err)
@@ -59,8 +59,23 @@ func main() {
 	defer dbs.Close()
 
 	confirmedBlockHandler := func(block *core.FullBlock) error {
-		// blocks, err := db.GetUnprocessedConfirmedBlocks()
 		logger.Info("Confirmed block", "block", block)
+
+		blocks, err := dbs.GetUnprocessedConfirmedBlocks()
+		if err != nil {
+			return err
+		}
+
+		for _, b := range blocks {
+			err := dbs.MarkConfirmedBlockProcessed(b, func() error {
+				logger.Info("Block has been processed", "block", b)
+
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
 
 		return nil
 	}

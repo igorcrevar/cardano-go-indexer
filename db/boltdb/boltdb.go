@@ -3,7 +3,8 @@ package boltdb
 import (
 	"encoding/json"
 	"fmt"
-	"igorcrevar/cardano-go-syncer/core"
+
+	"github.com/igorcrevar/cardano-go-indexer/core"
 
 	"github.com/boltdb/bolt"
 )
@@ -79,7 +80,7 @@ func (bd *BoltDatabase) GetTxOutput(txInput core.TxInput) (*core.TxOutput, error
 	return result, nil
 }
 
-func (bd *BoltDatabase) MarkConfirmedBlockProcessed(block *core.FullBlock) error {
+func (bd *BoltDatabase) MarkConfirmedBlockProcessed(block *core.FullBlock, proccess func() error) error {
 	return bd.db.Update(func(tx *bolt.Tx) error {
 		// move block from one bucket to the other
 		data := tx.Bucket(unprocessedBlocksBucket).Get(block.Key())
@@ -95,7 +96,7 @@ func (bd *BoltDatabase) MarkConfirmedBlockProcessed(block *core.FullBlock) error
 			return fmt.Errorf("could not move to processed blocks: %v", err)
 		}
 
-		return nil
+		return proccess()
 	})
 }
 

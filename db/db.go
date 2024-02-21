@@ -1,10 +1,11 @@
 package db
 
 import (
-	"igorcrevar/cardano-go-syncer/core"
-	"igorcrevar/cardano-go-syncer/db/boltdb"
-	"igorcrevar/cardano-go-syncer/db/leveldb"
 	"strings"
+
+	"github.com/igorcrevar/cardano-go-indexer/core"
+	"github.com/igorcrevar/cardano-go-indexer/db/boltdb"
+	"github.com/igorcrevar/cardano-go-indexer/db/leveldb"
 )
 
 func NewDatabase(name string) core.Database {

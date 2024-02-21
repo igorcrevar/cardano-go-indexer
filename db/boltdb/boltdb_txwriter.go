@@ -3,7 +3,8 @@ package boltdb
 import (
 	"encoding/json"
 	"fmt"
-	"igorcrevar/cardano-go-syncer/core"
+
+	"github.com/igorcrevar/cardano-go-indexer/core"
 
 	"github.com/boltdb/bolt"
 )

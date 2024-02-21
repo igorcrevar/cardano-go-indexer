@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"igorcrevar/cardano-go-syncer/core"
+
+	"github.com/igorcrevar/cardano-go-indexer/core"
 
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/opt"
