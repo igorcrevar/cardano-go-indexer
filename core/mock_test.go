@@ -46,12 +46,10 @@ var _ BlockSyncer = (*BlockSyncerMock)(nil)
 
 type DatabaseMock struct {
 	mock.Mock
-	Writter                         *DbTransactionWriterMock
-	GetLatestBlockPointFn           func() (*BlockPoint, error)
-	GetTxOutputFn                   func(txInput TxInput) (*TxOutput, error)
-	GetUnprocessedConfirmedBlocksFn func(maxCnt int) ([]*FullBlock, error)
-	InitFn                          func(filepath string) error
-	MarkConfirmedBlockProcessedFn   func(blocks []*FullBlock) error
+	Writter               *DbTransactionWriterMock
+	GetLatestBlockPointFn func() (*BlockPoint, error)
+	GetTxOutputFn         func(txInput TxInput) (*TxOutput, error)
+	InitFn                func(filepath string) error
 }
 
 // GetLatestBlockPoint implements Database.
@@ -80,10 +78,6 @@ func (m *DatabaseMock) GetTxOutput(txInput TxInput) (*TxOutput, error) {
 func (m *DatabaseMock) GetUnprocessedConfirmedBlocks(maxCnt int) ([]*FullBlock, error) {
 	args := m.Called(maxCnt)
 
-	if m.GetUnprocessedConfirmedBlocksFn != nil {
-		return m.GetUnprocessedConfirmedBlocksFn(maxCnt)
-	}
-
 	return args.Get(0).([]*FullBlock), args.Error(1)
 }
 
@@ -99,14 +93,8 @@ func (m *DatabaseMock) Init(filepath string) error {
 }
 
 // MarkConfirmedBlockProcessed implements Database.
-func (m *DatabaseMock) MarkConfirmedBlocksProcessed(blocks []*FullBlock, process func() error) error {
-	args := m.Called(blocks, process)
-
-	if m.MarkConfirmedBlockProcessedFn != nil {
-		return m.MarkConfirmedBlockProcessedFn(blocks)
-	}
-
-	return args.Error(0)
+func (m *DatabaseMock) MarkConfirmedBlocksProcessed(blocks []*FullBlock) error {
+	return m.Called(blocks).Error(0)
 }
 
 // OpenTx implements Database.

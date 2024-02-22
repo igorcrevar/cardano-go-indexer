@@ -19,6 +19,6 @@ type Database interface {
 	Init(filepath string) error
 	Close() error
 
-	MarkConfirmedBlocksProcessed(blocks []*FullBlock, process func() error) error
+	MarkConfirmedBlocksProcessed(blocks []*FullBlock) error
 	GetUnprocessedConfirmedBlocks(maxCnt int) ([]*FullBlock, error)
 }

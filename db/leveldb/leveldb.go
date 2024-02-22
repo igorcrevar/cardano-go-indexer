@@ -70,7 +70,7 @@ func (lvldb *LevelDbDatabase) GetTxOutput(txInput core.TxInput) (*core.TxOutput,
 	return result, nil
 }
 
-func (lvldb *LevelDbDatabase) MarkConfirmedBlocksProcessed(blocks []*core.FullBlock, process func() error) error {
+func (lvldb *LevelDbDatabase) MarkConfirmedBlocksProcessed(blocks []*core.FullBlock) error {
 	batch := new(leveldb.Batch)
 
 	for _, block := range blocks {
@@ -81,10 +81,6 @@ func (lvldb *LevelDbDatabase) MarkConfirmedBlocksProcessed(blocks []*core.FullBl
 
 		batch.Put(bucketKey(processedBlocksBucket, block.Key()), bytes)
 		batch.Delete(bucketKey(unprocessedBlocksBucket, block.Key()))
-	}
-
-	if err := process(); err != nil {
-		return err
 	}
 
 	return lvldb.db.Write(batch, &opt.WriteOptions{

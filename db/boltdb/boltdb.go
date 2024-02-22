@@ -80,7 +80,7 @@ func (bd *BoltDatabase) GetTxOutput(txInput core.TxInput) (*core.TxOutput, error
 	return result, nil
 }
 
-func (bd *BoltDatabase) MarkConfirmedBlocksProcessed(blocks []*core.FullBlock, proccess func() error) error {
+func (bd *BoltDatabase) MarkConfirmedBlocksProcessed(blocks []*core.FullBlock) error {
 	return bd.db.Update(func(tx *bolt.Tx) error {
 		for _, block := range blocks {
 			if err := tx.Bucket(unprocessedBlocksBucket).Delete(block.Key()); err != nil {
@@ -97,7 +97,7 @@ func (bd *BoltDatabase) MarkConfirmedBlocksProcessed(blocks []*core.FullBlock, p
 			}
 		}
 
-		return proccess()
+		return nil
 	})
 }
 

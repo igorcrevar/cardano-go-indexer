@@ -70,7 +70,7 @@ func main() {
 			logger.Info("Block has been processed", "block", b)
 		}
 
-		if err := dbs.MarkConfirmedBlocksProcessed(blocks, func() error { return nil }); err != nil {
+		if err := dbs.MarkConfirmedBlocksProcessed(blocks); err != nil {
 			return err
 		}
 
