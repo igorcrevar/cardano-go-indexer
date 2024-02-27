@@ -80,31 +80,34 @@ func (bd *BoltDatabase) GetTxOutput(txInput core.TxInput) (*core.TxOutput, error
 	return result, nil
 }
 
-func (bd *BoltDatabase) MarkConfirmedBlockProcessed(block *core.FullBlock, proccess func() error) error {
+func (bd *BoltDatabase) MarkConfirmedBlocksProcessed(blocks []*core.FullBlock) error {
 	return bd.db.Update(func(tx *bolt.Tx) error {
-		// move block from one bucket to the other
-		data := tx.Bucket(unprocessedBlocksBucket).Get(block.Key())
-		if len(data) == 0 {
-			return fmt.Errorf("unprocessed block does not exist: %v", block.Key())
+		for _, block := range blocks {
+			if err := tx.Bucket(unprocessedBlocksBucket).Delete(block.Key()); err != nil {
+				return fmt.Errorf("could not remove from unprocessed blocks: %v", err)
+			}
+
+			bytes, err := json.Marshal(block)
+			if err != nil {
+				return fmt.Errorf("could not marshal block: %v", err)
+			}
+
+			if err := tx.Bucket(processedBlocksBucket).Put(block.Key(), bytes); err != nil {
+				return fmt.Errorf("could not move to processed blocks: %v", err)
+			}
 		}
 
-		if err := tx.Bucket(unprocessedBlocksBucket).Delete(block.Key()); err != nil {
-			return fmt.Errorf("could not set remove from unprocessed blocks: %v", err)
-		}
-
-		if err := tx.Bucket(processedBlocksBucket).Put(block.Key(), data); err != nil {
-			return fmt.Errorf("could not move to processed blocks: %v", err)
-		}
-
-		return proccess()
+		return nil
 	})
 }
 
-func (bd *BoltDatabase) GetUnprocessedConfirmedBlocks() ([]*core.FullBlock, error) {
+func (bd *BoltDatabase) GetUnprocessedConfirmedBlocks(maxCnt int) ([]*core.FullBlock, error) {
 	var result []*core.FullBlock
 
-	if err := bd.db.View(func(tx *bolt.Tx) error {
-		return tx.Bucket(unprocessedBlocksBucket).ForEach(func(k, v []byte) error {
+	err := bd.db.View(func(tx *bolt.Tx) error {
+		cursor := tx.Bucket(unprocessedBlocksBucket).Cursor()
+
+		for k, v := cursor.First(); k != nil; k, v = cursor.Next() {
 			var block *core.FullBlock
 
 			if err := json.Unmarshal(v, &block); err != nil {
@@ -112,10 +115,14 @@ func (bd *BoltDatabase) GetUnprocessedConfirmedBlocks() ([]*core.FullBlock, erro
 			}
 
 			result = append(result, block)
+			if maxCnt > 0 && len(result) == maxCnt {
+				break
+			}
+		}
 
-			return nil
-		})
-	}); err != nil {
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 

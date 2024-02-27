@@ -70,19 +70,17 @@ func (lvldb *LevelDbDatabase) GetTxOutput(txInput core.TxInput) (*core.TxOutput,
 	return result, nil
 }
 
-func (lvldb *LevelDbDatabase) MarkConfirmedBlockProcessed(block *core.FullBlock, process func() error) error {
-	bytes, err := lvldb.db.Get(bucketKey(unprocessedBlocksBucket, block.Key()), nil)
-	if err != nil {
-		return err
-	}
-
+func (lvldb *LevelDbDatabase) MarkConfirmedBlocksProcessed(blocks []*core.FullBlock) error {
 	batch := new(leveldb.Batch)
 
-	batch.Delete(bucketKey(unprocessedBlocksBucket, block.Key()))
-	batch.Put(bucketKey(processedBlocksBucket, block.Key()), bytes)
+	for _, block := range blocks {
+		bytes, err := json.Marshal(block)
+		if err != nil {
+			return fmt.Errorf("could not marshal block: %v", err)
+		}
 
-	if err := process(); err != nil {
-		return err
+		batch.Put(bucketKey(processedBlocksBucket, block.Key()), bytes)
+		batch.Delete(bucketKey(unprocessedBlocksBucket, block.Key()))
 	}
 
 	return lvldb.db.Write(batch, &opt.WriteOptions{
@@ -91,7 +89,7 @@ func (lvldb *LevelDbDatabase) MarkConfirmedBlockProcessed(block *core.FullBlock,
 	})
 }
 
-func (lvldb *LevelDbDatabase) GetUnprocessedConfirmedBlocks() ([]*core.FullBlock, error) {
+func (lvldb *LevelDbDatabase) GetUnprocessedConfirmedBlocks(maxCnt int) ([]*core.FullBlock, error) {
 	var result []*core.FullBlock
 
 	iter := lvldb.db.NewIterator(util.BytesPrefix(unprocessedBlocksBucket), nil)
@@ -105,6 +103,9 @@ func (lvldb *LevelDbDatabase) GetUnprocessedConfirmedBlocks() ([]*core.FullBlock
 		}
 
 		result = append(result, block)
+		if maxCnt > 0 && len(result) == maxCnt {
+			break
+		}
 	}
 
 	return result, iter.Error()

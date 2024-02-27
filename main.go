@@ -61,20 +61,17 @@ func main() {
 	confirmedBlockHandler := func(block *core.FullBlock) error {
 		logger.Info("Confirmed block", "block", block)
 
-		blocks, err := dbs.GetUnprocessedConfirmedBlocks()
+		blocks, err := dbs.GetUnprocessedConfirmedBlocks(0)
 		if err != nil {
 			return err
 		}
 
 		for _, b := range blocks {
-			err := dbs.MarkConfirmedBlockProcessed(b, func() error {
-				logger.Info("Block has been processed", "block", b)
+			logger.Info("Block has been processed", "block", b)
+		}
 
-				return nil
-			})
-			if err != nil {
-				return err
-			}
+		if err := dbs.MarkConfirmedBlocksProcessed(blocks); err != nil {
+			return err
 		}
 
 		return nil
