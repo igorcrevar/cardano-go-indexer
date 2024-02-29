@@ -183,14 +183,14 @@ func (bi *BlockIndexer) processConfirmedBlock(
 	)
 
 	// get all transactions of interest from block
-	txsOfInterest, err := bi.getTxsOfInterest(allBlockTransactions)
+	txsOfInterest, err := bi.filterTxsOfInterest(allBlockTransactions)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	if bi.config.KeepAllTxOutputsInDb {
-		txOutputsToSave = bi.getTxOutputs(txsOfInterest, nil)
-		txOutputsToRemove = bi.getTxInputs(txsOfInterest)
+		txOutputsToSave = bi.getTxOutputs(allBlockTransactions, nil)
+		txOutputsToRemove = bi.getTxInputs(allBlockTransactions)
 	} else if bi.config.AddressCheck&AddressCheckInputs != 0 { // save outputs only if we are checking inputs
 		txOutputsToSave = bi.getTxOutputs(txsOfInterest, bi.addressesOfInterest)
 		txOutputsToRemove = bi.getTxInputs(txsOfInterest)
@@ -226,7 +226,7 @@ func (bi *BlockIndexer) processConfirmedBlock(
 	return fullBlock, latestBlockPoint, nil
 }
 
-func (bi *BlockIndexer) getTxsOfInterest(txs []ledger.Transaction) (result []ledger.Transaction, err error) {
+func (bi *BlockIndexer) filterTxsOfInterest(txs []ledger.Transaction) (result []ledger.Transaction, err error) {
 	if len(bi.addressesOfInterest) == 0 {
 		return txs, nil
 	}
@@ -249,8 +249,7 @@ func (bi *BlockIndexer) getTxsOfInterest(txs []ledger.Transaction) (result []led
 
 func (bi *BlockIndexer) isTxOutputOfInterest(tx ledger.Transaction) bool {
 	for _, out := range tx.Outputs() {
-		address := out.Address().String()
-		if bi.addressesOfInterest[address] {
+		if bi.addressesOfInterest[out.Address().String()] {
 			return true
 		}
 	}
@@ -310,49 +309,36 @@ func (bi *BlockIndexer) getTxInputs(txs []ledger.Transaction) (res []*TxInput) {
 	return res
 }
 
-func (bi BlockIndexer) convertLedgerInputs(inputs []ledger.TransactionInput) ([]*TxInputOutput, error) {
-	if len(inputs) == 0 {
-		return nil, nil
-	}
-
-	result := make([]*TxInputOutput, len(inputs))
-
-	for j, inp := range inputs {
-		txInput := TxInput{
-			Hash:  inp.Id().String(),
-			Index: inp.Index(),
-		}
-
-		output, err := bi.db.GetTxOutput(txInput)
-		if err != nil {
-			return nil, err
-		}
-
-		result[j] = &TxInputOutput{
-			Input: TxInput{
-				Hash:  inp.Id().String(),
-				Index: inp.Index(),
-			},
-		}
-
-		if output != nil {
-			result[j].Output = *output
-		}
-	}
-
-	return result, nil
-}
-
 func (bi BlockIndexer) createTx(ledgerTx ledger.Transaction) (*Tx, error) {
-	inputs, err := bi.convertLedgerInputs(ledgerTx.Inputs())
-	if err != nil {
-		return nil, err
+	tx := &Tx{
+		Hash: ledgerTx.Hash(),
+		Fee:  ledgerTx.Fee(),
 	}
 
-	tx := &Tx{
-		Hash:   ledgerTx.Hash(),
-		Fee:    ledgerTx.Fee(),
-		Inputs: inputs,
+	if inputs := ledgerTx.Inputs(); len(inputs) > 0 {
+		inputOutputPairs := make([]*TxInputOutput, len(inputs))
+
+		for j, inp := range inputs {
+			txInputOutput := &TxInputOutput{
+				Input: TxInput{
+					Hash:  inp.Id().String(),
+					Index: inp.Index(),
+				},
+			}
+
+			output, err := bi.db.GetTxOutput(txInputOutput.Input)
+			if err != nil {
+				return nil, err
+			}
+
+			if output != nil {
+				txInputOutput.Output = *output
+			}
+
+			inputOutputPairs[j] = txInputOutput
+		}
+
+		tx.Inputs = inputOutputPairs
 	}
 
 	if outputs := ledgerTx.Outputs(); len(outputs) > 0 {
