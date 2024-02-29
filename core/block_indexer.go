@@ -356,10 +356,10 @@ func (bi BlockIndexer) createTx(ledgerTx ledger.Transaction) (*Tx, error) {
 	}
 
 	if outputs := ledgerTx.Outputs(); len(outputs) > 0 {
-		result := make([]*TxOutput, len(outputs))
+		tx.Outputs = make([]*TxOutput, len(outputs))
 
 		for j, out := range outputs {
-			result[j] = &TxOutput{
+			tx.Outputs[j] = &TxOutput{
 				Address: out.Address().String(),
 				Amount:  out.Amount(),
 			}
