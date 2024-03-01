@@ -181,7 +181,7 @@ func (bs *BlockSyncerImpl) rollForwardCallback(blockType uint, blockInfo interfa
 	}
 
 	bs.logger.Debug("Roll forward",
-		"number", blockHeader.BlockNumber, "hash", blockHeader.Hash(), "slot", blockHeader.SlotNumber(),
+		"number", blockHeader.BlockNumber(), "hash", blockHeader.Hash(), "slot", blockHeader.SlotNumber(),
 		"tip_slot", tip.Point.Slot, "tip_hash", hex.EncodeToString(tip.Point.Hash))
 
 	getTxsFunc := func() ([]ledger.Transaction, error) {
