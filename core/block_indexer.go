@@ -315,7 +315,7 @@ func (bi BlockIndexer) createTx(ledgerBlockHeader ledger.BlockHeader, ledgerTx l
 	}
 
 	if inputs := ledgerTx.Inputs(); len(inputs) > 0 {
-		inputOutputPairs := make([]*TxInputOutput, len(inputs))
+		tx.Inputs = make([]*TxInputOutput, len(inputs))
 
 		for j, inp := range inputs {
 			txInput := TxInput{
@@ -328,13 +328,11 @@ func (bi BlockIndexer) createTx(ledgerBlockHeader ledger.BlockHeader, ledgerTx l
 				return nil, err
 			}
 
-			inputOutputPairs[j] = &TxInputOutput{
+			tx.Inputs[j] = &TxInputOutput{
 				Input:  txInput,
 				Output: output,
 			}
 		}
-
-		tx.Inputs = inputOutputPairs
 	}
 
 	if outputs := ledgerTx.Outputs(); len(outputs) > 0 {
