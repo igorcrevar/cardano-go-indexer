@@ -58,23 +58,19 @@ func main() {
 
 	defer dbs.Close()
 
-	confirmedBlockHandler := func(block *core.FullBlock) error {
-		logger.Info("Confirmed block", "block", block)
+	confirmedTxsHandler := func(txs []*core.Tx) error {
+		logger.Info("Confirmed txs", "cnt", len(txs))
 
-		blocks, err := dbs.GetUnprocessedConfirmedBlocks(0)
+		unprocessedTxs, err := dbs.GetUnprocessedConfirmedTxs(0)
 		if err != nil {
 			return err
 		}
 
-		for _, b := range blocks {
-			logger.Info("Block has been processed", "block", b)
+		for _, tx := range unprocessedTxs {
+			logger.Info("Tx has been processed", "tx", tx)
 		}
 
-		if err := dbs.MarkConfirmedBlocksProcessed(blocks); err != nil {
-			return err
-		}
-
-		return nil
+		return dbs.MarkConfirmedTxsProcessed(unprocessedTxs)
 	}
 
 	indexerConfig := &core.BlockIndexerConfig{
@@ -96,7 +92,7 @@ func main() {
 		KeepAlive:      true,
 	}
 
-	indexer := core.NewBlockIndexer(indexerConfig, confirmedBlockHandler, dbs, logger.Named("block_indexer"))
+	indexer := core.NewBlockIndexer(indexerConfig, confirmedTxsHandler, dbs, logger.Named("block_indexer"))
 
 	syncer := core.NewBlockSyncer(syncerConfig, indexer, logger.Named("block_syncer"))
 	defer syncer.Close()
