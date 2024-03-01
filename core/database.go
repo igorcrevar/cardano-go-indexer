@@ -9,7 +9,7 @@ type DbTransactionWriter interface {
 }
 
 type TxOutputRetriever interface {
-	GetTxOutput(txInput TxInput) (*TxOutput, error)
+	GetTxOutput(txInput TxInput) (TxOutput, error)
 }
 
 type BlockIndexerDb interface {

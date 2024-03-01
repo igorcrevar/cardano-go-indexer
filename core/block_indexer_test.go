@@ -66,7 +66,7 @@ func TestBlockIndexer_processConfirmedBlockNoTxOfInterest(t *testing.T) {
 	}
 
 	dbMock.On("OpenTx").Once()
-	dbMock.On("GetTxOutput", mock.Anything).Return((*TxOutput)(nil), error(nil)).Times(3)
+	dbMock.On("GetTxOutput", mock.Anything).Return(TxOutput{}, error(nil)).Times(3)
 	dbMock.Writter.On("Execute").Return(error(nil)).Once()
 	dbMock.Writter.On("SetLatestBlockPoint", expectedLastBlockPoint).Once()
 	dbMock.Writter.On("RemoveTxOutputs", ([]*TxInput)(nil), false).Once()
@@ -162,15 +162,15 @@ func TestBlockIndexer_processConfirmedBlockTxOfInterestInOutputs(t *testing.T) {
 	dbMock.On("GetTxOutput", TxInput{
 		Hash:  txInputs[1].Id().String(),
 		Index: txInputs[1].Index(),
-	}).Return((*TxOutput)(nil), error(nil)).Once()
+	}).Return(TxOutput{}, error(nil)).Once()
 	dbMock.On("GetTxOutput", TxInput{
 		Hash:  txInputs[0].Id().String(),
 		Index: txInputs[0].Index(),
-	}).Return(&TxOutput{Address: "1", Amount: 2}, error(nil)).Once()
+	}).Return(TxOutput{Address: "1", Amount: 2}, error(nil)).Once()
 	dbMock.On("GetTxOutput", TxInput{
 		Hash:  txInputs[2].Id().String(),
 		Index: txInputs[2].Index(),
-	}).Return(&TxOutput{Address: "2", Amount: 4}, error(nil)).Once()
+	}).Return(TxOutput{Address: "2", Amount: 4}, error(nil)).Once()
 
 	dbMock.Writter.On("Execute").Return(error(nil)).Once()
 	dbMock.Writter.On("SetLatestBlockPoint", expectedLastBlockPoint).Once()
@@ -321,21 +321,21 @@ func TestBlockIndexer_processConfirmedBlockTxOfInterestInInputs(t *testing.T) {
 	dbMock.On("GetTxOutput", TxInput{
 		Hash:  txInputs[0].Id().String(),
 		Index: txInputs[0].Index(),
-	}).Return((*TxOutput)(nil), error(nil)).Twice()
+	}).Return(TxOutput{}, error(nil)).Twice()
 	dbMock.On("GetTxOutput", TxInput{
 		Hash:  txInputs[2].Id().String(),
 		Index: txInputs[2].Index(),
-	}).Return((*TxOutput)(nil), error(nil)).Once()
+	}).Return(TxOutput{}, error(nil)).Once()
 	dbMock.On("GetTxOutput", TxInput{
 		Hash:  txInputs[1].Id().String(),
 		Index: txInputs[1].Index(),
-	}).Return(&TxOutput{
+	}).Return(TxOutput{
 		Address: addressesOfInterest[0],
 	}, error(nil)).Twice()
 	dbMock.On("GetTxOutput", TxInput{
 		Hash:  txInputs[3].Id().String(),
 		Index: txInputs[3].Index(),
-	}).Return(&TxOutput{
+	}).Return(TxOutput{
 		Address: addressesOfInterest[1],
 	}, error(nil)).Twice()
 	dbMock.Writter.On("SetLatestBlockPoint", expectedLastBlockPoint).Once()
@@ -457,13 +457,13 @@ func TestBlockIndexer_processConfirmedBlockKeepAllTxOutputsInDb(t *testing.T) {
 	dbMock.On("GetTxOutput", TxInput{
 		Hash:  txInputs[0].Id().String(),
 		Index: txInputs[0].Index(),
-	}).Return(&TxOutput{
+	}).Return(TxOutput{
 		Address: "addr1",
 	}, error(nil)).Once()
 	dbMock.On("GetTxOutput", TxInput{
 		Hash:  txInputs[1].Id().String(),
 		Index: txInputs[1].Index(),
-	}).Return(&TxOutput{
+	}).Return(TxOutput{
 		Address: "addr2",
 	}, error(nil)).Once()
 	dbMock.Writter.On("Execute").Return(error(nil)).Once()

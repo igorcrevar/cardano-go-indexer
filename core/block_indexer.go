@@ -265,7 +265,7 @@ func (bi *BlockIndexer) isTxInputOfInterest(tx ledger.Transaction) (bool, error)
 		})
 		if err != nil {
 			return false, err
-		} else if txOutput != nil && !txOutput.IsUsed && bi.addressesOfInterest[txOutput.Address] {
+		} else if !txOutput.IsUsed && bi.addressesOfInterest[txOutput.Address] {
 			return true, nil
 		}
 	}
@@ -319,23 +319,20 @@ func (bi BlockIndexer) createTx(ledgerTx ledger.Transaction) (*Tx, error) {
 		inputOutputPairs := make([]*TxInputOutput, len(inputs))
 
 		for j, inp := range inputs {
-			txInputOutput := &TxInputOutput{
-				Input: TxInput{
-					Hash:  inp.Id().String(),
-					Index: inp.Index(),
-				},
+			txInput := TxInput{
+				Hash:  inp.Id().String(),
+				Index: inp.Index(),
 			}
 
-			output, err := bi.db.GetTxOutput(txInputOutput.Input)
+			output, err := bi.db.GetTxOutput(txInput)
 			if err != nil {
 				return nil, err
 			}
 
-			if output != nil {
-				txInputOutput.Output = *output
+			inputOutputPairs[j] = &TxInputOutput{
+				Input:  txInput,
+				Output: output,
 			}
-
-			inputOutputPairs[j] = txInputOutput
 		}
 
 		tx.Inputs = inputOutputPairs
