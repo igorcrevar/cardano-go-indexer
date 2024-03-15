@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/igorcrevar/cardano-go-indexer/core"
-	"github.com/igorcrevar/cardano-go-indexer/db/boltdb"
+	"github.com/igorcrevar/cardano-go-indexer/db/bbolt"
 	"github.com/igorcrevar/cardano-go-indexer/db/leveldb"
 )
 
@@ -13,7 +13,7 @@ func NewDatabase(name string) core.Database {
 	case "leveldb":
 		return &leveldb.LevelDbDatabase{}
 	default:
-		return &boltdb.BoltDatabase{}
+		return &bbolt.BBoltDatabase{}
 	}
 }
 

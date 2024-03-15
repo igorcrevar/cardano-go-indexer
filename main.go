@@ -82,7 +82,8 @@ func main() {
 		AddressCheck:           core.AddressCheckAll,
 		ConfirmationBlockCount: 10,
 		AddressesOfInterest:    addressesOfInterest,
-		SoftDeleteUtxo:         true,
+		SoftDeleteUtxo:         false,
+		KeepAllTxOutputsInDb:   false,
 	}
 	syncerConfig := &core.BlockSyncerConfig{
 		NetworkMagic:   networkMagic,
