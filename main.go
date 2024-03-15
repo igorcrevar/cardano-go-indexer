@@ -58,8 +58,9 @@ func main() {
 
 	defer dbs.Close()
 
-	confirmedTxsHandler := func(txs []*core.Tx) error {
-		logger.Info("Confirmed txs", "cnt", len(txs))
+	confirmedBlockHandler := func(confirmedBlock *core.CardanoBlock, txs []*core.Tx) error {
+		logger.Info("Confirmed block", "hash", confirmedBlock.Hash, "slot", confirmedBlock.Slot,
+			"allTxs", len(confirmedBlock.Txs), "ourTxs", len(txs))
 
 		unprocessedTxs, err := dbs.GetUnprocessedConfirmedTxs(0)
 		if err != nil {
@@ -93,7 +94,7 @@ func main() {
 		KeepAlive:      true,
 	}
 
-	indexer := core.NewBlockIndexer(indexerConfig, confirmedTxsHandler, dbs, logger.Named("block_indexer"))
+	indexer := core.NewBlockIndexer(indexerConfig, confirmedBlockHandler, dbs, logger.Named("block_indexer"))
 
 	syncer := core.NewBlockSyncer(syncerConfig, indexer, logger.Named("block_syncer"))
 	defer syncer.Close()
