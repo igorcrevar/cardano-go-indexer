@@ -71,7 +71,7 @@ func NewCardanoBlock(header ledger.BlockHeader, txs []string) *CardanoBlock {
 }
 
 func (cb CardanoBlock) Key() []byte {
-	return []byte(fmt.Sprintf("%20d%s", cb.Slot, cb.Hash))
+	return []byte(fmt.Sprintf("%20d", cb.Slot))
 }
 
 func NewWitnesses(vkeyWitnesses []interface{}) []Witness {
