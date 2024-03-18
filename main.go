@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -62,6 +63,18 @@ func main() {
 		logger.Info("Confirmed block", "hash", confirmedBlock.Hash, "slot", confirmedBlock.Slot,
 			"allTxs", len(confirmedBlock.Txs), "ourTxs", len(txs))
 
+		lastBlocks, err := dbs.GetLatestConfirmedBlocks(5)
+		if err != nil {
+			return err
+		}
+
+		lastBlocksInfo := make([]string, len(lastBlocks))
+		for i, x := range lastBlocks {
+			lastBlocksInfo[i] = fmt.Sprintf("(%d-%s)", x.Slot, x.Hash)
+		}
+
+		logger.Debug("Last n blocks", "info", strings.Join(lastBlocksInfo, ", "))
+
 		unprocessedTxs, err := dbs.GetUnprocessedConfirmedTxs(0)
 		if err != nil {
 			return err
@@ -80,11 +93,12 @@ func main() {
 			BlockHash:   startBlockHash,
 			BlockNumber: startBlockNum,
 		},
-		AddressCheck:           core.AddressCheckAll,
-		ConfirmationBlockCount: 10,
-		AddressesOfInterest:    addressesOfInterest,
-		SoftDeleteUtxo:         false,
-		KeepAllTxOutputsInDb:   false,
+		AddressCheck:            core.AddressCheckAll,
+		ConfirmationBlockCount:  10,
+		AddressesOfInterest:     addressesOfInterest,
+		SoftDeleteUtxo:          false,
+		KeepAllTxOutputsInDb:    false,
+		KeepAllTxsHashesInBlock: false,
 	}
 	syncerConfig := &core.BlockSyncerConfig{
 		NetworkMagic:   networkMagic,

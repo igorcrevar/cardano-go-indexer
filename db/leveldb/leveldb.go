@@ -114,11 +114,7 @@ func (lvldb *LevelDbDatabase) GetLatestConfirmedBlocks(maxCnt int) ([]*core.Card
 	iter := lvldb.db.NewIterator(util.BytesPrefix(confirmedBlocks), nil)
 	defer iter.Release()
 
-	if !iter.Last() {
-		return result, nil
-	}
-
-	for {
+	for ok := iter.Last(); ok; ok = iter.Prev() {
 		var block *core.CardanoBlock
 
 		if err := json.Unmarshal(iter.Value(), &block); err != nil {
@@ -127,10 +123,6 @@ func (lvldb *LevelDbDatabase) GetLatestConfirmedBlocks(maxCnt int) ([]*core.Card
 
 		result = append(result, block)
 		if maxCnt > 0 && len(result) == maxCnt {
-			break
-		}
-
-		if !iter.Prev() {
 			break
 		}
 	}
