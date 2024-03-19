@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/blinklabs-io/gouroboros/ledger"
 	"github.com/blinklabs-io/gouroboros/protocol/chainsync"
@@ -53,6 +54,7 @@ type BlockIndexer struct {
 
 	db BlockIndexerDb
 
+	mutex  sync.Mutex
 	logger hclog.Logger
 }
 
@@ -80,6 +82,9 @@ func NewBlockIndexer(config *BlockIndexerConfig, confirmedBlockHandler NewConfir
 }
 
 func (bi *BlockIndexer) RollBackwardFunc(point common.Point, tip chainsync.Tip) error {
+	bi.mutex.Lock()
+	defer bi.mutex.Unlock()
+
 	pointHash := bytes2Hash(point.Hash)
 
 	// linear is ok, there will be smaller number of unconfirmed blocks in memory
@@ -108,6 +113,9 @@ func (bi *BlockIndexer) RollBackwardFunc(point common.Point, tip chainsync.Tip) 
 }
 
 func (bi *BlockIndexer) RollForwardFunc(blockHeader ledger.BlockHeader, getTxsFunc GetTxsFunc, tip chainsync.Tip) error {
+	bi.mutex.Lock()
+	defer bi.mutex.Unlock()
+
 	if uint(len(bi.unconfirmedBlocks)) < bi.config.ConfirmationBlockCount {
 		// If there are not enough children blocks to promote the first one to the confirmed state,
 		// a new block header is added, and the function returns
@@ -143,6 +151,9 @@ func (bi *BlockIndexer) RollForwardFunc(blockHeader ledger.BlockHeader, getTxsFu
 }
 
 func (bi *BlockIndexer) Reset() (BlockPoint, error) {
+	bi.mutex.Lock()
+	defer bi.mutex.Unlock()
+
 	// try to read latest point block from the database
 	latestPoint, err := bi.db.GetLatestBlockPoint()
 	if err != nil {
@@ -310,7 +321,7 @@ func (bi *BlockIndexer) getTxInputs(txs []ledger.Transaction) (res []*TxInput) {
 	return res
 }
 
-func (bi BlockIndexer) createTx(ledgerBlockHeader ledger.BlockHeader, ledgerTx ledger.Transaction, indx uint32) (*Tx, error) {
+func (bi *BlockIndexer) createTx(ledgerBlockHeader ledger.BlockHeader, ledgerTx ledger.Transaction, indx uint32) (*Tx, error) {
 	tx := &Tx{
 		Indx:      indx,
 		Hash:      ledgerTx.Hash(),
