@@ -43,7 +43,7 @@ func main() {
 		LogLevel:      hclog.Debug,
 		JSONLogFormat: false,
 		AppendFile:    true,
-		LogFilePath:   "logs/cardano_indexer",
+		LogFilePath:   "logs/cardano_indexer.log",
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

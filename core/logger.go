@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -11,40 +12,53 @@ import (
 )
 
 type LoggerConfig struct {
-	LogLevel      hclog.Level
-	JSONLogFormat bool
-	AppendFile    bool
-	LogFilePath   string
-	Name          string
+	LogLevel      hclog.Level `json:"logLevel"`
+	JSONLogFormat bool        `json:"jsonLogFormat"`
+	AppendFile    bool        `json:"appendFile"`
+	LogFilePath   string      `json:"logFilePath"`
+	Name          string      `json:"name"`
 }
 
-func NewLogger(config LoggerConfig) (l hclog.Logger, err error) {
-	var logFileWriter *os.File
-
-	if config.LogFilePath != "" {
-		fullFilePath := filepath.Base(config.LogFilePath)
-
-		if dir := filepath.Dir(config.LogFilePath); dir != "/" && strings.TrimLeft(dir, ".") != "" {
-			if dirErr := os.MkdirAll(dir, os.ModePerm); dirErr == nil {
-				fullFilePath = filepath.Join(dir, fullFilePath)
-			}
-		}
-
-		if !config.AppendFile {
-			timestamp := strings.Replace(strings.Replace(time.Now().UTC().Format(time.RFC3339), ":", "_", -1), "-", "_", -1)
-			fullFilePath = fullFilePath + "_" + timestamp
-		}
-
-		logFileWriter, err = os.OpenFile(fullFilePath+".log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
-		if err != nil {
-			return nil, fmt.Errorf("could not create or open log file: %w", err)
-		}
+func NewLogger(config LoggerConfig) (hclog.Logger, error) {
+	output, err := getLogFileWriter(config.LogFilePath, config.AppendFile)
+	if err != nil {
+		return nil, fmt.Errorf("could not create or open log file: %w", err)
 	}
 
 	return hclog.New(&hclog.LoggerOptions{
 		Name:       config.Name,
 		Level:      config.LogLevel,
-		Output:     logFileWriter,
+		Output:     output,
 		JSONFormat: config.JSONLogFormat,
 	}), nil
+}
+
+func getLogFileWriter(logFilePath string, appendFile bool) (*os.File, error) {
+	logFilePath = strings.Trim(logFilePath, " ")
+	if logFilePath == "" {
+		return nil, nil
+	}
+
+	logFileDirectory := filepath.Dir(logFilePath)
+	logFileName := filepath.Base(logFilePath)
+
+	if _, err := os.Stat(logFileDirectory); os.IsNotExist(err) {
+		if err := os.MkdirAll(logFileDirectory, 0770); err != nil {
+			return nil, err
+		}
+	}
+
+	if !appendFile {
+		suffix := strings.Replace(strings.Replace(time.Now().UTC().Format(time.RFC3339), ":", "_", -1), "-", "_", -1)
+		parts := strings.SplitN(logFileName, ".", 2)
+		if len(parts) == 1 {
+			logFileName = fmt.Sprintf("%s_%s", parts[0], suffix)
+		} else {
+			logFileName = fmt.Sprintf("%s_%s.%s", parts[0], suffix, parts[1])
+		}
+
+		logFilePath = path.Join(logFileDirectory, logFileName)
+	}
+
+	return os.OpenFile(logFilePath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0660)
 }
