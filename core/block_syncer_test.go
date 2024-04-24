@@ -290,3 +290,22 @@ func TestSyncRollForwardCalled(t *testing.T) {
 	time.Sleep(5 * time.Second)
 	require.True(t, called)
 }
+
+func TestSync_ConnectionIsClosed(t *testing.T) {
+	t.Parallel()
+
+	mockSyncerBlockHandler := NewBlockSyncerHandlerMock(ExistingPointSlot, ExistingPointHashStr)
+	syncer := NewBlockSyncer(&BlockSyncerConfig{
+		NetworkMagic: NetworkMagic,
+		NodeAddress:  NodeAddress,
+		RestartDelay: time.Millisecond * 10,
+	}, mockSyncerBlockHandler, hclog.NewNullLogger())
+
+	syncer.Close()
+
+	require.NoError(t, syncer.syncExecute())
+	require.Nil(t, syncer.connection)
+
+	require.NoError(t, syncer.Sync())
+	require.Nil(t, syncer.connection)
+}
