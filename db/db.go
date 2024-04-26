@@ -11,7 +11,7 @@ import (
 func NewDatabase(name string) core.Database {
 	switch strings.ToLower(name) {
 	case "leveldb":
-		return &leveldb.LevelDbDatabase{}
+		return &leveldb.LevelDBDatabase{}
 	default:
 		return &bbolt.BBoltDatabase{}
 	}

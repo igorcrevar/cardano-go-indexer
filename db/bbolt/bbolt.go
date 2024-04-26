@@ -26,7 +26,7 @@ var (
 var _ core.Database = (*BBoltDatabase)(nil)
 
 func (bd *BBoltDatabase) Init(filePath string) error {
-	db, err := bbolt.Open(filePath, 0600, nil)
+	db, err := bbolt.Open(filePath, 0660, nil)
 	if err != nil {
 		return fmt.Errorf("could not open db: %w", err)
 	}
@@ -34,7 +34,9 @@ func (bd *BBoltDatabase) Init(filePath string) error {
 	bd.db = db
 
 	return db.Update(func(tx *bbolt.Tx) error {
-		for _, bn := range [][]byte{txOutputsBucket, latestBlockPointBucket, processedTxsBucket, unprocessedTxsBucket, confirmedBlocks} {
+		for _, bn := range [][]byte{
+			txOutputsBucket, latestBlockPointBucket, processedTxsBucket, unprocessedTxsBucket, confirmedBlocks,
+		} {
 			_, err := tx.CreateBucketIfNotExists(bn)
 			if err != nil {
 				return fmt.Errorf("could not create bucket %s: %w", string(bn), err)
@@ -182,7 +184,7 @@ func (bd *BBoltDatabase) GetConfirmedBlocksFrom(slotNumber uint64, maxCnt int) (
 	return result, nil
 }
 
-func (bd *BBoltDatabase) OpenTx() core.DbTransactionWriter {
+func (bd *BBoltDatabase) OpenTx() core.DBTransactionWriter {
 	return &BBoltTransactionWriter{
 		db: bd.db,
 	}

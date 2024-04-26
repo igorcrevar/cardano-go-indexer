@@ -97,7 +97,7 @@ func main() {
 		ConfirmationBlockCount:  10,
 		AddressesOfInterest:     addressesOfInterest,
 		SoftDeleteUtxo:          false,
-		KeepAllTxOutputsInDb:    false,
+		KeepAllTxOutputsInDB:    false,
 		KeepAllTxsHashesInBlock: false,
 	}
 	syncerConfig := &core.BlockSyncerConfig{
