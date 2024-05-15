@@ -125,6 +125,12 @@ func (m *DatabaseMock) GetConfirmedBlocksFrom(slotNumber uint64, maxCnt int) ([]
 	return args.Get(0).([]*CardanoBlock), args.Error(1) //nolint:forcetypeassert
 }
 
+func (m *DatabaseMock) GetAllTxOutputs(address string, onlyNotUser bool) ([]*TxInputOutput, error) {
+	args := m.Called(address, onlyNotUser)
+
+	return args.Get(0).([]*TxInputOutput), args.Error(1) //nolint:forcetypeassert
+}
+
 var _ Database = (*DatabaseMock)(nil)
 
 type DBTransactionWriterMock struct {

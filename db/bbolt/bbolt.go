@@ -3,6 +3,8 @@ package bbolt
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/igorcrevar/cardano-go-indexer/core"
 
@@ -173,6 +175,44 @@ func (bd *BBoltDatabase) GetConfirmedBlocksFrom(slotNumber uint64, maxCnt int) (
 			if maxCnt > 0 && len(result) == maxCnt {
 				break
 			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (bd *BBoltDatabase) GetAllTxOutputs(address string, onlyNotUsed bool) ([]*core.TxInputOutput, error) {
+	var result []*core.TxInputOutput
+
+	err := bd.db.View(func(tx *bbolt.Tx) error {
+		cursor := tx.Bucket(txOutputsBucket).Cursor()
+
+		for k, v := cursor.First(); k != nil; k, v = cursor.Next() {
+			var output core.TxOutput
+
+			if err := json.Unmarshal(v, &output); err != nil {
+				return err
+			}
+
+			if output.Address != address || (onlyNotUsed && output.IsUsed) {
+				continue
+			}
+
+			vs := strings.Split(string(k), "_")
+			num, _ := strconv.Atoi(vs[1])
+
+			result = append(result, &core.TxInputOutput{
+				Input: core.TxInput{
+					Hash:  vs[0],
+					Index: uint32(num),
+				},
+				Output: output,
+			})
 		}
 
 		return nil

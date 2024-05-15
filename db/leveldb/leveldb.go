@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/igorcrevar/cardano-go-indexer/core"
 
@@ -150,6 +152,38 @@ func (lvldb *LevelDBDatabase) GetConfirmedBlocksFrom(slotNumber uint64, maxCnt i
 	}
 
 	return result, iter.Error()
+}
+
+func (lvldb *LevelDBDatabase) GetAllTxOutputs(address string, onlyNotUsed bool) ([]*core.TxInputOutput, error) {
+	var result []*core.TxInputOutput
+
+	iter := lvldb.db.NewIterator(util.BytesPrefix(unprocessedTxsBucket), nil)
+	defer iter.Release()
+
+	for iter.Next() {
+		var output core.TxOutput
+
+		if err := json.Unmarshal(iter.Value(), &output); err != nil {
+			return nil, err
+		}
+
+		if output.Address != address || (onlyNotUsed && output.IsUsed) {
+			continue
+		}
+
+		vs := strings.Split(string(iter.Key()), "_")
+		num, _ := strconv.Atoi(vs[1])
+
+		result = append(result, &core.TxInputOutput{
+			Input: core.TxInput{
+				Hash:  vs[0],
+				Index: uint32(num),
+			},
+			Output: output,
+		})
+	}
+
+	return result, nil
 }
 
 func (lvldb *LevelDBDatabase) OpenTx() core.DBTransactionWriter {
