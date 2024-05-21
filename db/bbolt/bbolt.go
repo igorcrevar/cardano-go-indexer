@@ -3,6 +3,7 @@ package bbolt
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -220,6 +221,11 @@ func (bd *BBoltDatabase) GetAllTxOutputs(address string, onlyNotUsed bool) ([]*c
 	if err != nil {
 		return nil, err
 	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Output.Block < result[j].Output.Block ||
+			result[i].Output.Block == result[j].Output.Block && result[i].Input.Hash < result[j].Input.Hash
+	})
 
 	return result, nil
 }

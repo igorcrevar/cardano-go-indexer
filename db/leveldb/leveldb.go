@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -157,7 +158,7 @@ func (lvldb *LevelDBDatabase) GetConfirmedBlocksFrom(slotNumber uint64, maxCnt i
 func (lvldb *LevelDBDatabase) GetAllTxOutputs(address string, onlyNotUsed bool) ([]*core.TxInputOutput, error) {
 	var result []*core.TxInputOutput
 
-	iter := lvldb.db.NewIterator(util.BytesPrefix(unprocessedTxsBucket), nil)
+	iter := lvldb.db.NewIterator(util.BytesPrefix(txOutputsBucket), nil)
 	defer iter.Release()
 
 	for iter.Next() {
@@ -182,6 +183,11 @@ func (lvldb *LevelDBDatabase) GetAllTxOutputs(address string, onlyNotUsed bool) 
 			Output: output,
 		})
 	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Output.Block < result[j].Output.Block ||
+			result[i].Output.Block == result[j].Output.Block && result[i].Input.Hash < result[j].Input.Hash
+	})
 
 	return result, nil
 }
