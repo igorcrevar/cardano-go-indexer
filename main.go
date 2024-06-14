@@ -60,7 +60,8 @@ func main() {
 	defer dbs.Close()
 
 	confirmedBlockHandler := func(confirmedBlock *core.CardanoBlock, txs []*core.Tx) error {
-		logger.Info("Confirmed block", "hash", confirmedBlock.Hash, "slot", confirmedBlock.Slot,
+		logger.Info("Confirmed block",
+			"hash", hex.EncodeToString(confirmedBlock.Hash[:]), "slot", confirmedBlock.Slot,
 			"allTxs", len(confirmedBlock.Txs), "ourTxs", len(txs))
 
 		lastBlocks, err := dbs.GetLatestConfirmedBlocks(5)
@@ -70,7 +71,7 @@ func main() {
 
 		lastBlocksInfo := make([]string, len(lastBlocks))
 		for i, x := range lastBlocks {
-			lastBlocksInfo[i] = fmt.Sprintf("(%d-%s)", x.Slot, x.Hash)
+			lastBlocksInfo[i] = fmt.Sprintf("(%d-%s)", x.Slot, hex.EncodeToString(x.Hash[:]))
 		}
 
 		logger.Debug("Last n blocks", "info", strings.Join(lastBlocksInfo, ", "))
@@ -90,7 +91,7 @@ func main() {
 	indexerConfig := &core.BlockIndexerConfig{
 		StartingBlockPoint: &core.BlockPoint{
 			BlockSlot:   startSlot,
-			BlockHash:   startBlockHash,
+			BlockHash:   core.Hash(startBlockHash),
 			BlockNumber: startBlockNum,
 		},
 		AddressCheck:            core.AddressCheckAll,
