@@ -250,3 +250,9 @@ func bytes2HashString(bytes []byte) string {
 
 	return hex.EncodeToString(h[:])
 }
+
+// LedgerAddressToString makes possible to translate string representation of address to something else in the future
+// custom prefixes and so on
+func LedgerAddressToString(addr ledger.Address) string {
+	return addr.String()
+}
