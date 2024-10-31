@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/blinklabs-io/gouroboros/ledger"
-	"github.com/blinklabs-io/gouroboros/protocol/chainsync"
 	"github.com/blinklabs-io/gouroboros/protocol/common"
 	"github.com/hashicorp/go-hclog"
 )
@@ -20,34 +19,23 @@ const (
 
 type BlockIndexerConfig struct {
 	StartingBlockPoint *BlockPoint `json:"startingBlockPoint"`
-
 	// how many children blocks is needed for some block to be considered final
-	ConfirmationBlockCount uint `json:"confirmationBlockCount"`
-
-	AddressesOfInterest []string `json:"addressesOfInterest"`
-
-	KeepAllTxOutputsInDB bool `json:"keepAllTxOutputsInDb"`
-
-	AddressCheck int `json:"addressCheck"`
-
-	SoftDeleteUtxo bool `json:"softDeleteUtxo"`
-
-	KeepAllTxsHashesInBlock bool `json:"keepAllTxsHashesInBlock"`
+	ConfirmationBlockCount  uint     `json:"confirmationBlockCount"`
+	AddressesOfInterest     []string `json:"addressesOfInterest"`
+	KeepAllTxOutputsInDB    bool     `json:"keepAllTxOutputsInDb"`
+	AddressCheck            int      `json:"addressCheck"`
+	SoftDeleteUtxo          bool     `json:"softDeleteUtxo"`
+	KeepAllTxsHashesInBlock bool     `json:"keepAllTxsHashesInBlock"`
 }
 
 type NewConfirmedBlockHandler func(*CardanoBlock, []*Tx) error
-
-type blockWithLazyTxRetriever struct {
-	header ledger.BlockHeader
-	getTxs GetTxsFunc
-}
 
 type BlockIndexer struct {
 	config *BlockIndexerConfig
 
 	// latest confirmed and saved block point
 	latestBlockPoint      *BlockPoint
-	unconfirmedBlocks     CircularQueue[blockWithLazyTxRetriever]
+	unconfirmedBlocks     CircularQueue[ledger.BlockHeader]
 	confirmedBlockHandler NewConfirmedBlockHandler
 	addressesOfInterest   map[string]bool
 
@@ -75,24 +63,22 @@ func NewBlockIndexer(
 		config:                config,
 		latestBlockPoint:      nil,
 		confirmedBlockHandler: confirmedBlockHandler,
-		unconfirmedBlocks:     NewCircularQueue[blockWithLazyTxRetriever](int(config.ConfirmationBlockCount)),
+		unconfirmedBlocks:     NewCircularQueue[ledger.BlockHeader](int(config.ConfirmationBlockCount)), //nolint
 		db:                    db,
 		addressesOfInterest:   addressesOfInterest,
 		logger:                logger,
 	}
 }
 
-func (bi *BlockIndexer) RollBackwardFunc(
-	ctx chainsync.CallbackContext, point common.Point, tip chainsync.Tip,
-) error {
+func (bi *BlockIndexer) RollBackwardFunc(point common.Point) error {
 	bi.mutex.Lock()
 	defer bi.mutex.Unlock()
 
 	pointHash := bytes2HashString(point.Hash)
 
 	// linear is ok, there will be smaller number of unconfirmed blocks in memory
-	indx := bi.unconfirmedBlocks.Find(func(unc blockWithLazyTxRetriever) bool {
-		return unc.header.SlotNumber() == point.Slot && unc.header.Hash() == pointHash
+	indx := bi.unconfirmedBlocks.Find(func(header ledger.BlockHeader) bool {
+		return header.SlotNumber() == point.Slot && header.Hash() == pointHash
 	})
 	if indx != -1 {
 		bi.logger.Info("Roll backward to unconfirmed block",
@@ -119,31 +105,26 @@ func (bi *BlockIndexer) RollBackwardFunc(
 			bi.latestBlockPoint.BlockSlot, bi.latestBlockPoint.BlockHash))
 }
 
-func (bi *BlockIndexer) RollForwardFunc(
-	blockHeader ledger.BlockHeader, getTxsFunc GetTxsFunc, tip chainsync.Tip,
-) error {
+func (bi *BlockIndexer) RollForwardFunc(blockHeader ledger.BlockHeader, txsRetriever BlockTxsRetriever) error {
 	bi.mutex.Lock()
 	defer bi.mutex.Unlock()
 
 	if !bi.unconfirmedBlocks.IsFull() {
 		// If there are not enough children blocks to promote the first one to the confirmed state,
 		// a new block header is added, and the function returns
-		_ = bi.unconfirmedBlocks.Push(blockWithLazyTxRetriever{
-			header: blockHeader,
-			getTxs: getTxsFunc,
-		})
+		_ = bi.unconfirmedBlocks.Push(blockHeader)
 
 		return nil
 	}
 
-	firstBlock := bi.unconfirmedBlocks.Peek()
+	firstBlockHeader := bi.unconfirmedBlocks.Peek()
 
-	txs, err := firstBlock.getTxs()
+	txs, err := txsRetriever.GetBlockTransactions(firstBlockHeader)
 	if err != nil {
 		return err
 	}
 
-	confirmedBlock, confirmedTxs, latestBlockPoint, err := bi.processConfirmedBlock(firstBlock.header, txs)
+	confirmedBlock, confirmedTxs, latestBlockPoint, err := bi.processConfirmedBlock(firstBlockHeader, txs)
 	if err != nil {
 		return err
 	}
@@ -152,10 +133,7 @@ func (bi *BlockIndexer) RollForwardFunc(
 	bi.latestBlockPoint = latestBlockPoint
 
 	bi.unconfirmedBlocks.Pop()
-	_ = bi.unconfirmedBlocks.Push(blockWithLazyTxRetriever{
-		header: blockHeader,
-		getTxs: getTxsFunc,
-	})
+	_ = bi.unconfirmedBlocks.Push(blockHeader)
 
 	return bi.confirmedBlockHandler(confirmedBlock, confirmedTxs)
 }
@@ -384,6 +362,7 @@ func (bi *BlockIndexer) createTx(
 			if datum := out.Datum(); datum != nil {
 				txOutput.Datum = datum.Cbor()
 			}
+
 			if datumHash := out.DatumHash(); datumHash != nil {
 				txOutput.DatumHash = datumHash.String()
 			}

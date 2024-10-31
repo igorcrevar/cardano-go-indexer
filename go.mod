@@ -5,7 +5,7 @@ go 1.22
 toolchain go1.23.1
 
 require (
-	github.com/blinklabs-io/gouroboros v0.102.0
+	github.com/blinklabs-io/gouroboros v0.103.1
 	github.com/hashicorp/go-hclog v1.6.3
 	github.com/stretchr/testify v1.9.0
 	github.com/syndtr/goleveldb v1.0.0

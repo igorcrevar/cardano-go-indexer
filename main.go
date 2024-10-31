@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/hex"
 	"fmt"
-	"math"
 	"os"
 	"os/signal"
 	"strings"
@@ -17,26 +16,13 @@ import (
 )
 
 func main() {
-	networkMagic := uint32(42)
-	address := "localhost:3000"   // "/tmp/cardano-133064331/node-spo1/node.sock"
-	startBlockHash := []byte(nil) // from genesis
-	startSlot := uint64(0)
-	startBlockNum := uint64(math.MaxUint64)
-	addressesOfInterest := []string{}
-
 	// for test net
-	address = "preprod-node.play.dev.cardano.org:3001"
-	networkMagic = 1
-
-	// for main net
-	address = "backbone.cardano-mainnet.iohk.io:3001"
-	networkMagic = uint32(764824073)
-
-	startBlockHash, _ = hex.DecodeString("5d9435abf2a829142aaae08720afa05980efaa6ad58e47ebd4cffadc2f3c45d8")
-	startSlot = uint64(76592549)
-	startBlockNum = 7999980
-	addressesOfInterest = []string{
-		"addr1v9kganeshgdqyhwnyn9stxxgl7r4y2ejfyqjn88n7ncapvs4sugsd",
+	address := "preprod-node.play.dev.cardano.org:3001"
+	networkMagic := uint32(1)
+	startBlockHash, _ := hex.DecodeString("4b7f0ff899395dade775c7eb2bc8e16fb9824d9091266c7d4c9c55ac143ae6c8")
+	startSlot := uint64(74683550)
+	addressesOfInterest := []string{
+		"addr_test1wr64gtafm8rpkndue4ck2nx95u4flhwf643l2qmg9emjajg2ww0nj",
 	}
 
 	logger, err := core.NewLogger(core.LoggerConfig{
@@ -90,9 +76,8 @@ func main() {
 
 	indexerConfig := &core.BlockIndexerConfig{
 		StartingBlockPoint: &core.BlockPoint{
-			BlockSlot:   startSlot,
-			BlockHash:   core.Hash(startBlockHash),
-			BlockNumber: startBlockNum,
+			BlockSlot: startSlot,
+			BlockHash: core.Hash(startBlockHash),
 		},
 		AddressCheck:            core.AddressCheckAll,
 		ConfirmationBlockCount:  10,
