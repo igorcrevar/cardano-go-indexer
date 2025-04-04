@@ -1,9 +1,11 @@
 package core
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -58,7 +60,6 @@ type Tx struct {
 	Inputs    []*TxInputOutput `json:"inp"`
 	Outputs   []*TxOutput      `json:"out"`
 	Fee       uint64           `json:"fee"`
-	Witnesses []Witness        `json:"ws"`
 	Valid     bool             `json:"valid"`
 }
 
@@ -287,4 +288,22 @@ func (tt TokenAmount) String() string {
 // this will handle vector and other specific cases
 func LedgerAddressToString(addr ledger.Address) string {
 	return addr.String()
+}
+
+func SortTxInputOutputs(txInputsOutputs []*TxInputOutput) []*TxInputOutput {
+	sort.Slice(txInputsOutputs, func(i, j int) bool {
+		first, second := txInputsOutputs[i], txInputsOutputs[j]
+
+		if first.Output.Slot != second.Output.Slot {
+			return first.Output.Slot < second.Output.Slot
+		}
+
+		if cmp := bytes.Compare(first.Input.Hash[:], second.Input.Hash[:]); cmp != 0 {
+			return cmp < 0
+		}
+
+		return first.Input.Index < second.Input.Index
+	})
+
+	return txInputsOutputs
 }
